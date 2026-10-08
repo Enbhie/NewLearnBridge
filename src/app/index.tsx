@@ -1,7 +1,6 @@
-import { useState } from "react";
-import { useEffect } from "react";
-import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -13,10 +12,12 @@ import {
   updateProfile,
   type User,
 } from "firebase/auth";
+import { useCallback, useEffect, useState } from "react";
 import {
-  AppState,
   Alert,
+  AppState,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -24,17 +25,19 @@ import {
   TextInput,
   View,
 } from "react-native";
-import CharacterSelectScreen from "../components/CharacterSelectScreen";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AccountSettingsScreen, {
   type AccountPreferences,
   type LearnerProfile,
 } from "../components/AccountSettingsScreen";
 import { AnimatedPressable as Pressable } from "../components/AnimatedPressable";
+import CharacterSelectScreen from "../components/CharacterSelectScreen";
 import LessonCompleteScreen from "../components/LessonCompleteScreen";
 import LessonScreen from "../components/LessonScreen";
 import QuizScreen from "../components/QuizScreen";
 import ResultsScreen from "../components/ResultsScreen";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { getCompletedMissions, markMissionComplete } from "../data/missionProgress";
+import { offlineMissions, type Grade, type OfflineMission } from "../data/offlineMissions";
 import { auth, firebaseConfigured } from "../firebase";
 type Screen =
   | "home"
@@ -1069,37 +1072,122 @@ function MenuScreen({
   );
 }
 
-function MissionsScreen({ screen, setScreen }: { screen: Screen; setScreen: (s: Screen) => void }) {
-  const missionIllustrations = ["🚐", "🍰", "🥖", "🏪"];
+  const GRADES: Grade[] = ["K", "1", "2", "3"];
+  function MissionsScreen({ screen, setScreen }: { screen: Screen; setScreen: (s: Screen) => void }) 
+  {
+  const router = useRouter();
+  const [grade, setGrade] = useState<Grade>("K");
+  const [completed, setCompleted] = useState<string[]>([]);
+  const [pending, setPending] = useState<OfflineMission | null>(null);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+
+  const gradeMissions = offlineMissions.filter((mission) => mission.grade === grade);
+  const areaIcons = { Math: "🔢", Science: "🔬", "Reading & Writing": "📖" };
+
+  // reload checkmarks whenever this screen is shown (e.g. back from the scanner)
+  useFocusEffect(
+    useCallback(() => {
+      void getCompletedMissions().then(setCompleted);
+    }, [])
+  );
+
+  const closeCheck = () => {
+    setPending(null);
+    setPhotoUri(null);
+  };
+
+  const confirmMission = async () => {
+    if (!pending) return;
+    await markMissionComplete(pending.id);
+    setCompleted(await getCompletedMissions());
+    closeCheck();
+  };
+
+  const takePhoto = async (mission: OfflineMission) => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      const result = permission.granted
+        ? await ImagePicker.launchCameraAsync({ quality: 0.5 })
+        : await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
+      if (result.canceled) return;
+      setPhotoUri(result.assets[0].uri);
+      setPending(mission);
+    } catch {
+      Alert.alert("Could not open the camera", "Please try again.");
+    }
+  };
+
+  const startMission = (mission: OfflineMission) => {
+    if (mission.submission === "shape-scan") {
+      router.push({ pathname: "/shape-recognition", params: { missionId: mission.id } });
+    } else if (mission.submission === "photo") {
+      void takePhoto(mission);
+    } else {
+      setPending(mission);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.appPage}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Offline Math Missions</Text>
-        <Text style={styles.pageSubtitle}>Complete these real-life Filipino math activities!</Text>
-        {missions.map((mission, index) => (
-          <View style={styles.missionCard} key={mission.id}>
-            <View
-              style={[
-                styles.missionIllustration,
-                index % 2 === 0 ? styles.missionIllustrationBlue : styles.missionIllustrationYellow,
-              ]}
+        <Text style={styles.pageTitle}>Offline Missions</Text>
+        <Text style={styles.pageSubtitle}>Pick a mission and try it at home!</Text>
+
+        <View style={styles.gradeRow}>
+          {GRADES.map((g) => (
+            <Pressable
+              key={g}
+              accessibilityRole="button"
+              onPress={() => setGrade(g)}
+              style={[styles.gradeChip, grade === g && styles.gradeChipActive]}
             >
-              <Text style={styles.missionArt}>{missionIllustrations[index]}</Text>
-              <Text style={styles.missionArtSparkle}>✦</Text>
+              <Text style={[styles.gradeChipText, grade === g && styles.gradeChipTextActive]}>
+                {g === "K" ? "K" : `Grade ${g}`}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {gradeMissions.map((mission) => {
+          const done = completed.includes(mission.id);
+          return (
+            <View style={styles.missionCard} key={mission.id}>
+              <View style={styles.missionHeading}>
+                <Text style={styles.missionId}>{areaIcons[mission.area]}</Text>
+                <Text style={styles.missionTitle}>
+                  {done ? "✅ " : ""}
+                  {mission.title}
+                </Text>
+              </View>
+              <Text style={styles.missionSkill}>📚 {mission.subject}</Text>
+              <Text style={styles.cardBody}>{mission.task}</Text>
+              <ActionButton onPress={() => startMission(mission)}>
+                {done ? "DO IT AGAIN" : "START MISSION"}
+              </ActionButton>
             </View>
-            <View style={styles.missionHeading}>
-              <Text style={styles.missionId}>{mission.id}</Text>
-              <Text style={styles.missionTitle}>{mission.title}</Text>
-            </View>
-            <Text style={styles.missionSkill}>📚 Skill: {mission.skill}</Text>
-            <Text style={styles.cardBody}>{mission.description}</Text>
-            <ActionButton onPress={() => Alert.alert("Mission started", "Get a pencil and paper!")}>
-              START MISSION
+          );
+        })}
+      </ScrollView>
+
+      <Modal visible={!!pending} transparent animationType="fade" onRequestClose={closeCheck}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.cardHeading}>{pending?.title}</Text>
+            <Text style={styles.cardBody}>{pending?.task}</Text>
+            <Text style={[styles.missionSkill, { marginTop: 12 }]}>
+              Parent check: {pending?.parentCheck}
+            </Text>
+            {photoUri ? (
+              <Text style={styles.cardBody}>📸 Photo taken — please look at it together.</Text>
+            ) : null}
+            <ActionButton onPress={() => void confirmMission()}>PARENT CONFIRMS ✓</ActionButton>
+            <ActionButton onPress={closeCheck} variant="secondary">
+              NOT YET
             </ActionButton>
           </View>
-        ))}
-      </ScrollView>
+        </View>
+      </Modal>
+
       <BottomNavigation screen={screen} setScreen={setScreen} />
     </SafeAreaView>
   );
@@ -1836,5 +1924,11 @@ const styles = StyleSheet.create({
   iconPickerRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   iconOption: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#F0F4EC", justifyContent: "center", alignItems: "center", borderWidth: 2, borderColor: "transparent" },
   selectedIconOption: { borderColor: "#759B57", backgroundColor: "#E4F0DF" },
-  iconOptionText: { fontSize: 24 },
+  iconOptionText: { fontSize: 24 },    gradeRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
+   gradeChip: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: "#FFFFFF" },
+   gradeChipActive: { backgroundColor: "#F17D65" },
+   gradeChipText: { color: "#173B53", fontSize: 14, fontWeight: "800" },
+   gradeChipTextActive: { color: "#FFFFFF" },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(23,59,83,0.55)", alignItems: "center", justifyContent: "center", padding: 20 },
+  modalCard: { width: "100%", maxWidth: 420, backgroundColor: "#FFF8E7", borderRadius: 22, padding: 20 },
 });
