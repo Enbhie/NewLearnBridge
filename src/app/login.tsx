@@ -35,7 +35,7 @@ export default function LoginScreen() {
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 focus:border-blue-500 focus:bg-white"
                 placeholder="Enter your email"
                 placeholderTextColor="#9CA3AF"
-                value={email}
+                value={email ?? ""}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -48,7 +48,7 @@ export default function LoginScreen() {
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 focus:border-blue-500 focus:bg-white"
                 placeholder="Enter your password"
                 placeholderTextColor="#9CA3AF"
-                value={password}
+                value={password ?? ""}
                 onChangeText={setPassword}
                 secureTextEntry
               />
