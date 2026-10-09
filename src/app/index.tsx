@@ -1,34 +1,38 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
+import * as Notifications from "expo-notifications";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  reload,
-  sendEmailVerification,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
-  type User,
+    EmailAuthProvider,
+    createUserWithEmailAndPassword,
+    deleteUser,
+    onAuthStateChanged,
+    reauthenticateWithCredential,
+    reload,
+    sendEmailVerification,
+    sendPasswordResetEmail,
+    signInWithEmailAndPassword,
+    signOut,
+    updateProfile,
+    type User,
 } from "firebase/auth";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
-  AppState,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Alert,
+    AppState,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AccountSettingsScreen, {
-  type AccountPreferences,
-  type LearnerProfile,
+    type AccountPreferences,
+    type LearnerProfile,
 } from "../components/AccountSettingsScreen";
 import { AnimatedPressable as Pressable } from "../components/AnimatedPressable";
 import CharacterSelectScreen from "../components/CharacterSelectScreen";
@@ -39,6 +43,18 @@ import ResultsScreen from "../components/ResultsScreen";
 import { getCompletedMissions, markMissionComplete } from "../data/missionProgress";
 import { offlineMissions, type Grade, type OfflineMission } from "../data/offlineMissions";
 import { auth, firebaseConfigured } from "../firebase";
+
+if (Platform.OS !== "web") {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
+
 type Screen =
   | "home"
   | "login"
@@ -98,6 +114,8 @@ const KID_ICONS = ["🦉", "🦁", "🐰", "🐼", "🦊", "🐯"];
 const PROFILE_STORAGE_PREFIX = "learnbridge.profile.";
 const SETTINGS_STORAGE_PREFIX = "learnbridge.settings.";
 const SCREEN_TIME_STORAGE_PREFIX = "learnbridge.screenTime.";
+const EYE_BREAK_INTERVAL_SECONDS = 15 * 60;
+const EYE_BREAK_DURATION_SECONDS = 5 * 60;
 const DEFAULT_PREFERENCES: AccountPreferences = {
   difficulty: "standard",
   notificationsEnabled: false,
@@ -154,6 +172,7 @@ function getAuthErrorMessage(error: unknown) {
     "auth/invalid-credential": "The email or password is incorrect.",
     "auth/invalid-email": "Enter a valid email address.",
     "auth/network-request-failed": "Check your internet connection and try again.",
+    "auth/requires-recent-login": "Verify the parent account password and try again.",
     "auth/too-many-requests": "Too many attempts. Please wait and try again.",
     "auth/weak-password": "Choose a stronger password with at least 6 characters.",
   };
@@ -380,7 +399,7 @@ function LoginScreen({
                 style={[styles.textInput, emailError && styles.errorInput]}
                 placeholder="Enter email"
                 placeholderTextColor="#9CA3AF"
-                value={email}
+                value={email ?? ""}
                 onChangeText={(val) => {
                   setEmail(val);
                   if (emailError) setEmailError("");
@@ -398,7 +417,7 @@ function LoginScreen({
                 style={[styles.textInput, passwordError && styles.errorInput]}
                 placeholder="Enter password"
                 placeholderTextColor="#9CA3AF"
-                value={password}
+                value={password ?? ""}
                 onChangeText={(val) => {
                   setPassword(val);
                   if (passwordError) setPasswordError("");
@@ -519,7 +538,7 @@ function ForgotPasswordScreen({
                 style={[styles.textInput, emailError && styles.errorInput]}
                 placeholder="Enter your email"
                 placeholderTextColor="#9CA3AF"
-                value={email}
+                value={email ?? ""}
                 onChangeText={(value) => {
                   setEmail(value);
                   if (emailError) setEmailError("");
@@ -723,7 +742,7 @@ function SignUpScreen({
                 style={[styles.textInput, fieldErrors.name && styles.errorInput]}
                 placeholder="e.g., Bea"
                 placeholderTextColor="#9CA3AF"
-                value={childName}
+                value={childName ?? ""}
                 onChangeText={(val) => {
                   setChildName(val);
                   if (fieldErrors.name) clearFieldError("name");
@@ -742,7 +761,7 @@ function SignUpScreen({
                     style={[styles.textInput, styles.birthdateInput, fieldErrors.birthdate && styles.errorInput]}
                     placeholder="MM"
                     placeholderTextColor="#9CA3AF"
-                    value={birthdateMonth}
+                    value={birthdateMonth ?? ""}
                     onChangeText={(value) => updateBirthdatePart("month", value)}
                     keyboardType="number-pad"
                     maxLength={2}
@@ -755,7 +774,7 @@ function SignUpScreen({
                     style={[styles.textInput, styles.birthdateInput, fieldErrors.birthdate && styles.errorInput]}
                     placeholder="DD"
                     placeholderTextColor="#9CA3AF"
-                    value={birthdateDay}
+                    value={birthdateDay ?? ""}
                     onChangeText={(value) => updateBirthdatePart("day", value)}
                     keyboardType="number-pad"
                     maxLength={2}
@@ -768,7 +787,7 @@ function SignUpScreen({
                     style={[styles.textInput, styles.birthdateInput, fieldErrors.birthdate && styles.errorInput]}
                     placeholder="YYYY"
                     placeholderTextColor="#9CA3AF"
-                    value={birthdateYear}
+                    value={birthdateYear ?? ""}
                     onChangeText={(value) => updateBirthdatePart("year", value)}
                     keyboardType="number-pad"
                     maxLength={4}
@@ -784,7 +803,7 @@ function SignUpScreen({
                 style={[styles.textInput, fieldErrors.email && styles.errorInput]}
                 placeholder="name@gmail.com"
                 placeholderTextColor="#9CA3AF"
-                value={parentEmail}
+                value={parentEmail ?? ""}
                 onChangeText={(val) => {
                   setParentEmail(val);
                   if (fieldErrors.email) clearFieldError("email");
@@ -801,7 +820,7 @@ function SignUpScreen({
                 style={[styles.textInput, fieldErrors.password && styles.errorInput]}
                 placeholder="Create a password"
                 placeholderTextColor="#9CA3AF"
-                value={signUpPassword}
+                value={signUpPassword ?? ""}
                 onChangeText={(val) => {
                   setSignUpPassword(val);
                   if (fieldErrors.password) clearFieldError("password");
@@ -820,7 +839,7 @@ function SignUpScreen({
                 style={[styles.textInput, fieldErrors.confirmPassword && styles.errorInput]}
                 placeholder="Re-enter password"
                 placeholderTextColor="#9CA3AF"
-                value={confirmPassword}
+                value={confirmPassword ?? ""}
                 onChangeText={(val) => {
                   setConfirmPassword(val);
                   if (fieldErrors.confirmPassword) clearFieldError("confirmPassword");
@@ -862,16 +881,43 @@ function SignUpScreen({
   );
 }
 
+function EyeRestBreakScreen({ secondsRemaining }: { secondsRemaining: number }) {
+  const minutes = Math.floor(secondsRemaining / 60);
+  const seconds = secondsRemaining % 60;
+
+  return (
+    <SafeAreaView style={styles.eyeBreakPage}>
+      <View style={styles.eyeBreakPanel}>
+        <Text style={styles.eyeBreakIcon}>👀</Text>
+        <Text style={styles.eyeBreakTitle}>Time to rest your eyes</Text>
+        <Text style={styles.eyeBreakMessage}>
+          Look away from the screen and focus on something far away. Blink slowly and relax.
+        </Text>
+        <Text style={styles.eyeBreakTimer}>
+          {minutes}:{String(seconds).padStart(2, "0")}
+        </Text>
+        <Text style={styles.eyeBreakCaption}>Break time remaining</Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
 function EmailVerificationScreen({
   email,
+  password,
   onResend,
   onCheckVerification,
+  onEditRegistration,
 }: {
   email: string;
+  password: string;
   onResend: () => Promise<void>;
   onCheckVerification: () => Promise<void>;
+  onEditRegistration: (password: string) => Promise<void>;
 }) {
   const [isWorking, setIsWorking] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [reauthPassword, setReauthPassword] = useState(password);
 
   const runAction = async (action: () => Promise<void>) => {
     setIsWorking(true);
@@ -903,6 +949,33 @@ function EmailVerificationScreen({
         >
           <Text style={styles.submitButtonText}>Resend verification email</Text>
         </Pressable>
+        <Text style={styles.inputLabel}>Password to change registration details</Text>
+        <TextInput
+          style={styles.textInput}
+          placeholder="Enter your account password"
+          placeholderTextColor="#9CA3AF"
+          value={reauthPassword ?? ""}
+          onChangeText={setReauthPassword}
+          secureTextEntry
+          autoCapitalize="none"
+          editable={!isWorking}
+        />
+        <Pressable
+          accessibilityRole="button"
+          style={[styles.submitButton, styles.editRegistrationButton]}
+          onPress={() => {
+            setEditError("");
+            void runAction(() => onEditRegistration(reauthPassword)).catch((error: unknown) => {
+              setEditError(
+                error instanceof Error ? error.message : "Could not return to registration."
+              );
+            });
+          }}
+          disabled={isWorking}
+        >
+          <Text style={styles.submitButtonText}>Change registration details</Text>
+        </Pressable>
+        {editError ? <Text style={styles.fieldError}>{editError}</Text> : null}
       </View>
     </SafeAreaView>
   );
@@ -1255,6 +1328,8 @@ export default function App() {
   const [lessonProgress, setLessonProgress] = useState(0);
   const [screenTimeUsedSeconds, setScreenTimeUsedSeconds] = useState(0);
   const [screenTimeReady, setScreenTimeReady] = useState(false);
+  const [eyeBreakSecondsRemaining, setEyeBreakSecondsRemaining] = useState(0);
+  const notificationsEnabledRef = useRef(preferences.notificationsEnabled);
 
   useEffect(() => {
     if (!auth) return;
@@ -1329,10 +1404,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    notificationsEnabledRef.current = preferences.notificationsEnabled;
+  }, [preferences.notificationsEnabled]);
+
+  useEffect(() => {
     const accountId = firebaseUser?.uid;
     if (!accountId) {
       setScreenTimeUsedSeconds(0);
       setScreenTimeReady(false);
+      setEyeBreakSecondsRemaining(0);
       return;
     }
 
@@ -1341,12 +1421,14 @@ export default function App() {
     let isLoaded = false;
     let usageDate = getLocalDateStamp();
     let usedSeconds = 0;
+    let focusSeconds = 0;
+    let breakSeconds = 0;
     setScreenTimeReady(false);
 
     const persistUsage = () => {
       void AsyncStorage.setItem(
         storageKey,
-        JSON.stringify({ date: usageDate, usedSeconds })
+        JSON.stringify({ date: usageDate, usedSeconds, focusSeconds, breakSeconds })
       ).catch(() => undefined);
     };
 
@@ -1354,19 +1436,32 @@ export default function App() {
       .then((storedUsage) => {
         if (!isCurrent) return;
         if (storedUsage) {
-          const parsed = JSON.parse(storedUsage) as { date?: string; usedSeconds?: number };
+          const parsed = JSON.parse(storedUsage) as {
+            date?: string;
+            usedSeconds?: number;
+            focusSeconds?: number;
+            breakSeconds?: number;
+          };
           if (parsed.date === usageDate && Number.isFinite(parsed.usedSeconds)) {
             usedSeconds = Math.max(0, Math.floor(parsed.usedSeconds ?? 0));
+            focusSeconds = Number.isFinite(parsed.focusSeconds)
+              ? Math.max(0, Math.floor(parsed.focusSeconds ?? 0))
+              : usedSeconds % EYE_BREAK_INTERVAL_SECONDS;
+            breakSeconds = Number.isFinite(parsed.breakSeconds)
+              ? Math.max(0, Math.floor(parsed.breakSeconds ?? 0))
+              : 0;
           }
         }
         isLoaded = true;
         setScreenTimeUsedSeconds(usedSeconds);
+        setEyeBreakSecondsRemaining(breakSeconds);
         setScreenTimeReady(true);
       })
       .catch(() => {
         if (!isCurrent) return;
         isLoaded = true;
         setScreenTimeUsedSeconds(0);
+        setEyeBreakSecondsRemaining(0);
         setScreenTimeReady(true);
       });
 
@@ -1376,9 +1471,35 @@ export default function App() {
       if (currentDate !== usageDate) {
         usageDate = currentDate;
         usedSeconds = 0;
+        focusSeconds = 0;
+        breakSeconds = 0;
+        setEyeBreakSecondsRemaining(0);
       }
+
+      if (breakSeconds > 0) {
+        breakSeconds -= 1;
+        setEyeBreakSecondsRemaining(breakSeconds);
+        if (breakSeconds % 5 === 0) persistUsage();
+        return;
+      }
+
       usedSeconds += 1;
+      focusSeconds += 1;
       setScreenTimeUsedSeconds(usedSeconds);
+      if (focusSeconds >= EYE_BREAK_INTERVAL_SECONDS) {
+        focusSeconds = 0;
+        breakSeconds = EYE_BREAK_DURATION_SECONDS;
+        setEyeBreakSecondsRemaining(breakSeconds);
+        if (notificationsEnabledRef.current && Platform.OS !== "web") {
+          void Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Eye-rest break",
+              body: "Look away from the screen and relax your eyes for 5 minutes.",
+            },
+            trigger: null,
+          }).catch(() => undefined);
+        }
+      }
       if (usedSeconds % 5 === 0) persistUsage();
     }, 1000);
 
@@ -1436,6 +1557,33 @@ export default function App() {
       `${SETTINGS_STORAGE_PREFIX}${currentUser.uid}`,
       JSON.stringify(nextPreferences)
     ).catch(() => Alert.alert("Settings not saved", "Check device storage and try again."));
+  };
+
+  const handleNotificationPreferenceChange = async (enabled: boolean) => {
+    if (enabled && Platform.OS !== "web") {
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("eye-rest", {
+          name: "Eye-rest reminders",
+          importance: Notifications.AndroidImportance.DEFAULT,
+        });
+      }
+
+      let permission = await Notifications.getPermissionsAsync();
+      if (
+        !permission.granted &&
+        permission.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL
+      ) {
+        permission = await Notifications.requestPermissionsAsync();
+      }
+      if (
+        !permission.granted &&
+        permission.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL
+      ) {
+        throw new Error("Allow LearnBridge notifications in device settings to enable reminders.");
+      }
+    }
+
+    handlePreferencesChange({ ...preferences, notificationsEnabled: enabled });
   };
 
   const handleClearProgress = () => {
@@ -1554,6 +1702,38 @@ export default function App() {
     }
   };
 
+  const handleEditRegistration = async (password: string) => {
+    const currentAuth = requireFirebaseAuth();
+    const user = currentAuth.currentUser;
+    if (user) {
+      await reload(user);
+      if (user.emailVerified) {
+        setFirebaseUser(user);
+        setScreen("menu");
+        return;
+      }
+
+      if (!user.email || !password) {
+        throw new Error("Enter your account password to continue.");
+      }
+      await reauthenticateWithCredential(
+        user,
+        EmailAuthProvider.credential(user.email, password)
+      );
+      await deleteUser(user);
+      void Promise.all([
+        AsyncStorage.removeItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`),
+        AsyncStorage.removeItem(`${SETTINGS_STORAGE_PREFIX}${user.uid}`),
+        AsyncStorage.removeItem(`${SCREEN_TIME_STORAGE_PREFIX}${user.uid}`),
+      ]).catch(() => undefined);
+    }
+
+    setFirebaseUser(null);
+    setChildProfiles([]);
+    setActiveProfileId(null);
+    setScreen("signup");
+  };
+
   const handleSignOut = async () => {
     try {
       if (auth) await signOut(auth);
@@ -1576,6 +1756,49 @@ export default function App() {
     setScreen("home");
   };
 
+  const handleDeleteAccount = async (password: string) => {
+    const user = requireFirebaseAuth().currentUser;
+    if (!user?.email) throw new Error("No parent account is signed in.");
+    if (!password) throw new Error("Enter the parent account password to verify.");
+
+    try {
+      await reload(user);
+      if (!user.emailVerified) {
+        throw new Error("Verify the parent email before deleting this account.");
+      }
+      await reauthenticateWithCredential(
+        user,
+        EmailAuthProvider.credential(user.email, password)
+      );
+      await deleteUser(user);
+    } catch (error) {
+      throw new Error(getAuthErrorMessage(error));
+    }
+
+    void Promise.all([
+      AsyncStorage.removeItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`),
+      AsyncStorage.removeItem(`${SETTINGS_STORAGE_PREFIX}${user.uid}`),
+      AsyncStorage.removeItem(`${SCREEN_TIME_STORAGE_PREFIX}${user.uid}`),
+      AsyncStorage.removeItem(`learnbridge.missions.${user.uid}`),
+    ]).catch(() => undefined);
+    setFirebaseUser(null);
+    setEmail("");
+    setPassword("");
+    setChildName("");
+    setChildBirthdate("");
+    setChildProfiles([]);
+    setActiveProfileId(null);
+    setParentEmail("");
+    setSignUpPassword("");
+    setSelectedIcon(KID_ICONS[0]);
+    setPreferences(DEFAULT_PREFERENCES);
+    setQuizResults({ correct: 0, total: 0, breakdown: [] });
+    setLessonProgress(0);
+    setScreenTimeUsedSeconds(0);
+    setEyeBreakSecondsRemaining(0);
+    setScreen("home");
+  };
+
   const screenTimeLimitReached =
     Boolean(firebaseUser) &&
     screenTimeReady &&
@@ -1588,6 +1811,10 @@ export default function App() {
         <Text style={styles.limitReachedText}>Loading account settings...</Text>
       </SafeAreaView>
     );
+  }
+
+  if (eyeBreakSecondsRemaining > 0) {
+    return <EyeRestBreakScreen secondsRemaining={eyeBreakSecondsRemaining} />;
   }
 
   if (screenTimeLimitReached && screen !== "settings" && screen !== "verify-email") {
@@ -1656,8 +1883,10 @@ export default function App() {
     return (
       <EmailVerificationScreen
         email={firebaseUser?.email ?? parentEmail}
+        password={signUpPassword}
         onResend={handleResendVerification}
         onCheckVerification={handleCheckVerification}
+        onEditRegistration={handleEditRegistration}
       />
     );
   }
@@ -1704,12 +1933,14 @@ export default function App() {
         onSelectProfile={(profileId) => void handleSelectChildProfile(profileId)}
         onAddProfile={handleAddChildProfile}
         onPreferencesChange={handlePreferencesChange}
+        onNotificationPreferenceChange={handleNotificationPreferenceChange}
         onResetPassword={() => {
           const accountEmail = firebaseUser?.email ?? parentEmail;
           if (!accountEmail) throw new Error("No account email is available.");
           return handlePasswordReset(accountEmail);
         }}
         onClearProgress={handleClearProgress}
+        onDeleteAccount={handleDeleteAccount}
       />
     );
   }
@@ -1793,6 +2024,13 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  eyeBreakPage: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#D5F5E7", padding: 20 },
+  eyeBreakPanel: { width: "100%", maxWidth: 420, alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#B8DFCC", borderWidth: 2, borderRadius: 20, padding: 24 },
+  eyeBreakIcon: { fontSize: 54, marginBottom: 12 },
+  eyeBreakTitle: { color: "#173B53", fontSize: 26, lineHeight: 32, fontWeight: "900", textAlign: "center", marginBottom: 10 },
+  eyeBreakMessage: { color: "#36566A", fontSize: 16, lineHeight: 24, textAlign: "center", marginBottom: 22 },
+  eyeBreakTimer: { color: "#28543A", fontSize: 48, lineHeight: 56, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  eyeBreakCaption: { color: "#46564B", fontSize: 14, lineHeight: 20, fontWeight: "700", marginTop: 2 },
   limitReachedPage: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F1F4EF", padding: 20 },
   limitReachedPanel: { width: "100%", maxWidth: 420, backgroundColor: "#FFFFFF", borderColor: "#D8E1D7", borderWidth: 1, borderRadius: 14, padding: 22 },
   limitReachedTitle: { color: "#26352B", fontSize: 26, lineHeight: 32, fontWeight: "900", textAlign: "center", marginBottom: 10 },
@@ -1892,6 +2130,7 @@ const styles = StyleSheet.create({
   loginContainer: { flex: 1, backgroundColor: "#70CDE2" },
   verificationContainer: { flex: 1, justifyContent: "center", padding: 20, gap: 12 },
   resendButton: { backgroundColor: "#587449" },
+  editRegistrationButton: { backgroundColor: "#B85B42" },
   loginInner: { flex: 1, justifyContent: "center", padding: 20 },
   loginHeader: { marginBottom: 24 },
   authMascotBanner: { minHeight: 88, flexDirection: "row", alignItems: "center", backgroundColor: "#D5F5E7", borderRadius: 20, padding: 10, marginBottom: 14 },

@@ -1,13 +1,15 @@
 import { useState } from "react";
 import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
+    Alert,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -38,8 +40,10 @@ type Props = {
   onSelectProfile: (id: string) => void;
   onAddProfile: (profile: Omit<LearnerProfile, "id">) => Promise<void>;
   onPreferencesChange: (preferences: AccountPreferences) => void;
+  onNotificationPreferenceChange: (enabled: boolean) => Promise<void>;
   onResetPassword: () => Promise<void>;
   onClearProgress: () => void;
+  onDeleteAccount: (password: string) => Promise<void>;
 };
 
 const profileIcons = ["🦉", "🦁", "🐰", "🐼", "🦊", "🐯"];
@@ -92,8 +96,10 @@ export default function AccountSettingsScreen({
   onSelectProfile,
   onAddProfile,
   onPreferencesChange,
+  onNotificationPreferenceChange,
   onResetPassword,
   onClearProgress,
+  onDeleteAccount,
 }: Props) {
   const [showAddProfile, setShowAddProfile] = useState(false);
   const [newName, setNewName] = useState("");
@@ -104,6 +110,10 @@ export default function AccountSettingsScreen({
   const [profileError, setProfileError] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const updateDatePart = (
     part: "month" | "day" | "year",
@@ -163,6 +173,34 @@ export default function AccountSettingsScreen({
       );
     } finally {
       setIsSendingReset(false);
+    }
+  };
+
+  const handleNotificationPreferenceChange = async (enabled: boolean) => {
+    try {
+      await onNotificationPreferenceChange(enabled);
+    } catch (error) {
+      Alert.alert(
+        "Notifications not enabled",
+        error instanceof Error ? error.message : "Please try again."
+      );
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      setDeleteError("Enter the parent account password to verify.");
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    setDeleteError("");
+    try {
+      await onDeleteAccount(deletePassword);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Could not delete the account.");
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -238,7 +276,7 @@ export default function AccountSettingsScreen({
               <Text style={styles.bodyLabel}>Child's name</Text>
               <TextInput
                 style={styles.input}
-                value={newName}
+                value={newName ?? ""}
                 onChangeText={setNewName}
                 placeholder="Name"
                 placeholderTextColor="#8A8175"
@@ -255,7 +293,7 @@ export default function AccountSettingsScreen({
                     <TextInput
                       accessibilityLabel={`Birthdate ${label.toLowerCase()}`}
                       style={[styles.input, styles.dateInput]}
-                      value={value}
+                      value={value ?? ""}
                       onChangeText={(next) => updateDatePart(label.toLowerCase() as "month" | "day" | "year", next)}
                       keyboardType="number-pad"
                       maxLength={maxLength}
@@ -344,18 +382,21 @@ export default function AccountSettingsScreen({
               })}
             </View>
             <Text style={styles.hint}>
-              Counts time while LearnBridge is open. The counter resets at local midnight.
+              Counts active LearnBridge use and resets at local midnight. A 5-minute eye-rest break begins every 15 active minutes; break time is not counted.
             </Text>
           </View>
           <View style={styles.preferenceRow}>
             <View style={styles.preferenceCopy}>
-              <Text style={styles.bodyLabel}>Notification preference</Text>
-              <Text style={styles.hint}>Saved for this account. Reminders are not sent in this build.</Text>
+              <Text style={styles.bodyLabel}>Eye-rest notifications</Text>
+              <Text style={styles.hint}>
+                Your child gets a 5-minute break every 15 active minutes. On mobile, enable banners for an extra reminder when the break begins.
+              </Text>
             </View>
             <Switch
-              accessibilityLabel="Enable notification preference"
+              accessibilityLabel="Enable eye-rest notification banners"
               value={preferences.notificationsEnabled}
-              onValueChange={(value) => updatePreference("notificationsEnabled", value)}
+              onValueChange={(value) => void handleNotificationPreferenceChange(value)}
+              disabled={Platform.OS === "web"}
               trackColor={{ false: "#B9B2A8", true: "#759B57" }}
             />
           </View>
@@ -401,8 +442,69 @@ export default function AccountSettingsScreen({
             <Text style={styles.clearButtonText}>Clear Learning Progress</Text>
           </Pressable>
           <Text style={styles.hint}>Clears current quiz results and progress only. Account and child profiles stay intact.</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setDeletePassword("");
+              setDeleteError("");
+              setShowDeleteConfirmation(true);
+            }}
+            style={styles.deleteAccountButton}
+          >
+            <Text style={styles.deleteAccountButtonText}>Delete Account</Text>
+          </Pressable>
+          <Text style={styles.hint}>Requires the parent account password. This permanently deletes the account and child profiles.</Text>
         </View>
       </ScrollView>
+      <Modal
+        visible={showDeleteConfirmation}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeletingAccount) setShowDeleteConfirmation(false);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Verify parent to delete account</Text>
+            <Text style={styles.modalMessage}>
+              This permanently deletes {email || "the parent account"} and its child profiles. Enter the parent account password to continue.
+            </Text>
+            <TextInput
+              accessibilityLabel="Parent account password"
+              style={styles.input}
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              placeholder="Parent account password"
+              placeholderTextColor="#8A8175"
+              secureTextEntry
+              autoCapitalize="none"
+              editable={!isDeletingAccount}
+            />
+            {deleteError ? <Text style={styles.errorText}>{deleteError}</Text> : null}
+            <View style={styles.modalActions}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={isDeletingAccount}
+                onPress={() => setShowDeleteConfirmation(false)}
+                style={styles.cancelButton}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={isDeletingAccount}
+                onPress={() => void handleDeleteAccount()}
+                style={[styles.deleteConfirmButton, isDeletingAccount && styles.disabled]}
+              >
+                <Text style={styles.deleteConfirmText}>
+                  {isDeletingAccount ? "Deleting..." : "Verify & Delete"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -460,5 +562,14 @@ const styles = StyleSheet.create({
   disclosure: { backgroundColor: "#F4F7F3", borderRadius: 8, padding: 13, marginVertical: 12 },
   clearButton: { minHeight: 48, borderWidth: 1, borderColor: "#8C2D24", borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 8 },
   clearButtonText: { color: "#8C2D24", fontSize: 15, fontWeight: "800" },
+  deleteAccountButton: { minHeight: 48, backgroundColor: "#8C2D24", borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 12 },
+  deleteAccountButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(20,35,26,0.58)", alignItems: "center", justifyContent: "center", padding: 20 },
+  modalCard: { width: "100%", maxWidth: 420, backgroundColor: "#FFFFFF", borderRadius: 14, padding: 20 },
+  modalTitle: { color: "#26352B", fontSize: 20, lineHeight: 26, fontWeight: "900", marginBottom: 8 },
+  modalMessage: { color: "#46564B", fontSize: 15, lineHeight: 22, marginBottom: 10 },
+  modalActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 14 },
+  deleteConfirmButton: { minHeight: 44, backgroundColor: "#8C2D24", borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
+  deleteConfirmText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
   pressed: { opacity: 0.7 },
 });
