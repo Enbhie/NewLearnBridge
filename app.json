@@ -31,6 +31,14 @@
       "expo-router",
       "expo-notifications",
       [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Allow LearnBridge to use your camera to recognize shapes.",

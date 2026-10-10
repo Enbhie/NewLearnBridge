@@ -1,25 +1,19 @@
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { gradeLabels } from "../data/offlineMissions";
+import { categoryMeta, lessonContent, type CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 
-type Item = {
-  id: string;
-  emoji: string;
-  name: string;
-  price: number;
-};
-
-const items: Item[] = [
-  { id: "royal", emoji: "🥤", name: "Royal", price: 7 },
-  { id: "candy", emoji: "🍭", name: "Candy", price: 3 },
-  { id: "cookies", emoji: "🍪", name: "Cookies", price: 5 },
-];
-
 type Props = {
+  category: CategoryId;
   onBack: () => void;
   onContinue: () => void;
 };
 
-export default function LessonScreen({ onBack, onContinue }: Props) {
+export default function LessonScreen({ category, onBack, onContinue }: Props) {
+  const content = lessonContent[category];
+  const meta = categoryMeta[category];
+  const gradeLabel = content.grade === "K" ? gradeLabels.K : gradeLabels[content.grade];
+
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.topBar}>
@@ -40,21 +34,21 @@ export default function LessonScreen({ onBack, onContinue }: Props) {
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.banner}>
           <View style={styles.pill}>
-            <Text style={styles.pillText}>Grade 1, Lesson 1</Text>
+            <Text style={styles.pillText}>{gradeLabel} · Lesson 1</Text>
           </View>
-          <Text style={styles.bannerTitle}>Counting Change</Text>
+          <Text style={styles.bannerTitle}>{content.title}</Text>
         </View>
 
         <View style={styles.storeStrip}>
           <View style={styles.storeTag}>
-            <Text style={styles.storeTagText}>SARI-SARI STORE</Text>
+            <Text style={styles.storeTagText}>{content.theme}</Text>
           </View>
           <View style={styles.storeRow}>
             <View style={styles.storeStall}>
-              <Text style={styles.storeEmoji}>🏪</Text>
+              <Text style={styles.storeEmoji}>{content.items[0]?.emoji ?? meta.emoji}</Text>
             </View>
             <View style={styles.speechBubble}>
-              <Text style={styles.speechText}>Let's count ₱10!</Text>
+              <Text style={styles.speechText}>{content.storyLine}</Text>
             </View>
             <View style={styles.storeFriends}>
               <Text style={styles.owlFriend}>🦉</Text>
@@ -66,19 +60,17 @@ export default function LessonScreen({ onBack, onContinue }: Props) {
         <View style={styles.rememberCard}>
           <View style={styles.rememberHeader}>
             <Text style={styles.lightbulb}>💡</Text>
-            <Text style={styles.sectionTitle}>Remember This</Text>
+            <Text style={styles.sectionTitle}>{content.rememberTitle}</Text>
           </View>
-          <Text style={styles.mutedText}>
-            If you buy something for ₱7 and pay with ₱10, your change is:
-          </Text>
+          <Text style={styles.mutedText}>{content.rememberText}</Text>
           <View style={styles.equationBox}>
-            <Text style={styles.equation}>₱10 − ₱7 = ₱3</Text>
+            <Text style={styles.equation}>{content.equation}</Text>
           </View>
         </View>
 
-        <Text style={styles.itemsTitle}>Items in the Store:</Text>
+        <Text style={styles.itemsTitle}>Key ideas:</Text>
         <View style={styles.itemsRow}>
-          {items.map((item, index) => (
+          {content.items.map((item, index) => (
             <View
               key={item.id}
               style={[
@@ -88,7 +80,9 @@ export default function LessonScreen({ onBack, onContinue }: Props) {
             >
               <Text style={styles.itemEmoji}>{item.emoji}</Text>
               <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemPrice}>₱{item.price}</Text>
+              {item.price !== undefined ? (
+                <Text style={styles.itemPrice}>₱{item.price}</Text>
+              ) : null}
             </View>
           ))}
         </View>
@@ -97,6 +91,7 @@ export default function LessonScreen({ onBack, onContinue }: Props) {
       <View style={styles.footer}>
         <Pressable
           accessibilityRole="button"
+          soundEffect="open"
           onPress={onContinue}
           style={({ pressed }) => [styles.continueButton, pressed && styles.pressed]}
         >
@@ -174,6 +169,8 @@ const styles = StyleSheet.create({
   },
   storeEmoji: { fontSize: 44 },
   speechBubble: {
+    flex: 1,
+    marginHorizontal: 8,
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
     borderWidth: 2,
@@ -181,7 +178,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 12,
   },
-  speechText: { color: "#173B53", fontSize: 14, fontWeight: "900", textAlign: "center" },
+  speechText: { color: "#173B53", fontSize: 14, lineHeight: 19, fontWeight: "900", textAlign: "center" },
   storeFriends: { alignItems: "center" },
   owlFriend: { fontSize: 36 },
   personEmoji: { fontSize: 34, marginTop: -8 },
