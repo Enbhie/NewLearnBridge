@@ -8,20 +8,25 @@ import {
   type PressableProps,
   type ViewStyle,
 } from "react-native";
+import { startBackgroundMusic } from "../utils/backgroundMusic";
+import { playFeedback, type FeedbackKind } from "../utils/soundEffects";
 
 type AnimatedPressableProps = PressableProps & {
   pressScale?: number;
+  soundEffect?: FeedbackKind;
 };
 
 export function AnimatedPressable({
   onPressIn,
   onPressOut,
   pressScale = 0.96,
+  soundEffect = "tap",
   style,
   ...props
 }: AnimatedPressableProps) {
   const scale = useRef(new Animated.Value(1)).current;
-  const baseStyle = typeof style === "function" ? style({ pressed: false }) : style;
+  const baseStyle =
+    typeof style === "function" ? style({ pressed: false, hovered: false }) : style;
   const flattenedStyle = StyleSheet.flatten(baseStyle);
   const layoutStyle: ViewStyle = {
     alignSelf: flattenedStyle?.alignSelf,
@@ -49,6 +54,8 @@ export function AnimatedPressable({
   };
 
   const handlePressIn = (event: GestureResponderEvent) => {
+    startBackgroundMusic();
+    playFeedback(soundEffect);
     animateTo(pressScale);
     onPressIn?.(event);
   };

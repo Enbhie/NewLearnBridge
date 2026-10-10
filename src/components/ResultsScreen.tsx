@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { playFeedback } from "../utils/soundEffects";
 
 type QuestionResult = {
   label: string;
@@ -9,6 +11,7 @@ type QuestionResult = {
 
 type Props = {
   childName: string;
+  lessonTitle?: string;
   correct: number;
   total: number;
   timeLabel: string;
@@ -21,6 +24,7 @@ type Props = {
 
 export default function ResultsScreen({
   childName,
+  lessonTitle = "Lesson 1",
   correct,
   total,
   timeLabel,
@@ -33,6 +37,10 @@ export default function ResultsScreen({
   const allCorrect = total > 0 && correct === total;
   const stars = Math.max(1, Math.round((correct / Math.max(total, 1)) * 3));
 
+  useEffect(() => {
+    playFeedback("celebrate");
+  }, []);
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
@@ -41,7 +49,7 @@ export default function ResultsScreen({
             <Text style={styles.trophy}>🏆</Text>
           </View>
           <Text style={styles.heroTitle}>{allCorrect ? "Excellent Work!" : "Good Try!"}</Text>
-          <Text style={styles.heroSubtitle}>{childName} completed Lesson 1!</Text>
+          <Text style={styles.heroSubtitle}>{childName} completed {lessonTitle}!</Text>
           <Text style={styles.stars}>{"⭐".repeat(stars)}</Text>
         </View>
 
