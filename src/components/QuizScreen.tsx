@@ -2,9 +2,18 @@ import { useState } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { Difficulty } from "./AccountSettingsScreen";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import AlphabetWordGame from "./AlphabetWordGame";
+import {
+  lessonContent,
+  mathQuizQuestionsByDifficulty,
+  quizQuestions,
+  type CategoryId,
+} from "../data/learningContent";
+import { playFeedback } from "../utils/soundEffects";
 
 type Question = {
   id: string;
+  label: string;
   character: string;
   prompt: string;
   equation: string;
@@ -13,37 +22,8 @@ type Question = {
   hint: string;
 };
 
-const questionsByDifficulty: Record<Difficulty, Question> = {
-  easy: {
-    id: "q1-easy",
-    character: "Bea",
-    prompt: "bought a candy for ₱2 and paid with a ₱5 bill. How much change will she get?",
-    equation: "₱5 − ₱2 = ?",
-    options: ["2", "3", "4", "5"],
-    correctAnswer: "3",
-    hint: "Subtract the price from your payment!",
-  },
-  standard: {
-    id: "q1-standard",
-    character: "Bea",
-    prompt: "bought a candy for ₱7 and paid with a ₱10 bill. How much change will she get?",
-    equation: "₱10 − ₱7 = ?",
-    options: ["2", "3", "4", "5"],
-    correctAnswer: "3",
-    hint: "Subtract the price from your payment!",
-  },
-  challenge: {
-    id: "q1-challenge",
-    character: "Bea",
-    prompt: "bought a book for ₱13 and paid with a ₱20 bill. How much change will she get?",
-    equation: "₱20 − ₱13 = ?",
-    options: ["5", "6", "7", "8"],
-    correctAnswer: "7",
-    hint: "Subtract the price from your payment!",
-  },
-};
-
 type Props = {
+  category: CategoryId;
   difficulty: Difficulty;
   onBack: () => void;
   onFinish: (results: {
@@ -53,14 +33,35 @@ type Props = {
   }) => void;
 };
 
-export default function QuizScreen({ difficulty, onBack, onFinish }: Props) {
+export default function QuizScreen({ category, difficulty, onBack, onFinish }: Props) {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
-  const [correctCount, setCorrectCount] = useState(0);
+  const [answers, setAnswers] = useState<
+    { label: string; answer: string; correct: boolean }[]
+  >([]);
 
-  const question = questionsByDifficulty[difficulty];
+  if (category === "reading") {
+    return <AlphabetWordGame onBack={onBack} onFinish={onFinish} />;
+  }
+
+  const questions: Question[] = (
+    category === "math" ? mathQuizQuestionsByDifficulty[difficulty] : quizQuestions[category]
+  ).map((question) => ({
+    id: question.id,
+    label: lessonContent[category].title,
+    character: question.character,
+    prompt: question.prompt,
+    equation: question.displayText,
+    options: question.options,
+    correctAnswer: question.correctAnswer,
+    hint: question.hint,
+  }));
+  const question = questions[index];
   const isCorrect = selected === question.correctAnswer;
+  const illustration = category === "math"
+    ? ["🦉", "🏪", "🪙"]
+    : ["🦉", "🌱", "☀️"];
 
   const getOptionStyle = (option: string) => {
     if (!checked) return selected === option ? styles.optionSelected : styles.option;
@@ -72,23 +73,33 @@ export default function QuizScreen({ difficulty, onBack, onFinish }: Props) {
   const handleCheck = () => {
     if (!selected) return;
     setChecked(true);
-    if (isCorrect) setCorrectCount((count) => count + 1);
+    if (isCorrect) {
+      playFeedback("success");
+    } else {
+      playFeedback("error");
+    }
   };
 
   const handleNext = () => {
-    if (index + 1 >= 1) {
+    const updatedAnswers = [
+      ...answers,
+      {
+        label: question.label,
+        answer: category === "math" ? `₱${selected}` : selected ?? "No answer",
+        correct: isCorrect,
+      },
+    ];
+
+    if (index + 1 >= questions.length) {
       onFinish({
-        correct: correctCount + (isCorrect ? 1 : 0),
-        total: 1,
-        breakdown: [{
-          label: `Change from ${question.equation.replace(" = ?", "")}`,
-          answer: `₱${selected}`,
-          correct: isCorrect,
-        }],
+        correct: updatedAnswers.filter((answer) => answer.correct).length,
+        total: questions.length,
+        breakdown: updatedAnswers,
       });
       return;
     }
 
+    setAnswers(updatedAnswers);
     setIndex((current) => current + 1);
     setSelected(null);
     setChecked(false);
@@ -98,16 +109,16 @@ export default function QuizScreen({ difficulty, onBack, onFinish }: Props) {
     <SafeAreaView style={styles.screen}>
       <View style={styles.topBar}>
         <Pressable
-          accessibilityLabel="Go back to lesson"
+          accessibilityLabel="Back"
           accessibilityRole="button"
           onPress={onBack}
           style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
         >
-          <Text style={styles.backText}>←</Text>
+          <Text style={styles.backText}>Back</Text>
         </Pressable>
         <View style={styles.counterPill}>
           <Text style={styles.counterText}>
-            Question {index + 1} of 1
+            Question {index + 1} of {questions.length}
           </Text>
         </View>
         <Text style={styles.hearts}>❤️❤️❤️</Text>
@@ -120,9 +131,9 @@ export default function QuizScreen({ difficulty, onBack, onFinish }: Props) {
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.questionCard}>
           <View style={styles.quizIllustration}>
-            <Text style={styles.quizOwl}>🦉</Text>
-            <Text style={styles.quizShop}>🏪</Text>
-            <Text style={styles.quizCoin}>🪙</Text>
+            <Text style={styles.quizOwl}>{illustration[0]}</Text>
+            <Text style={styles.quizShop}>{illustration[1]}</Text>
+            <Text style={styles.quizCoin}>{illustration[2]}</Text>
           </View>
           <Text style={styles.questionText}>
             <Text style={styles.character}>{question.character}</Text> {question.prompt}
@@ -140,6 +151,7 @@ export default function QuizScreen({ difficulty, onBack, onFinish }: Props) {
               accessibilityRole="button"
               accessibilityState={{ selected: selected === option, disabled: checked }}
               disabled={checked}
+              soundEffect="select"
               onPress={() => setSelected(option)}
               style={({ pressed }) => [
                 getOptionStyle(option),
@@ -159,7 +171,9 @@ export default function QuizScreen({ difficulty, onBack, onFinish }: Props) {
         ) : (
           <View style={[styles.hintCard, isCorrect ? styles.correctFeedback : styles.incorrectFeedback]}>
             <Text style={styles.feedbackText}>
-              {isCorrect ? "Tama! Great job!" : `Not quite - the answer is ₱${question.correctAnswer}`}
+              {isCorrect
+                ? "Tama! Great job!"
+                : `Not quite - the answer is ${category === "math" ? `₱${question.correctAnswer}` : question.correctAnswer}`}
             </Text>
           </View>
         )}
@@ -196,15 +210,15 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   backButton: {
-    width: 40,
+    minWidth: 64,
     height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: "#9DD8E1",
+    borderRadius: 8,
+    backgroundColor: "#C62828",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 10,
   },
-  backText: { fontSize: 18, color: "#173B53" },
+  backText: { fontSize: 14, color: "#FFFFFF", fontWeight: "800" },
   counterPill: {
     borderWidth: 1.5,
     borderColor: "#9DD8E1",
@@ -222,7 +236,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 12,
   },
-  progressValue: { width: "100%", height: "100%", backgroundColor: "#F17D65" },
+  progressValue: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#F17D65",
+  },
   body: { padding: 20, paddingBottom: 24 },
   questionCard: { backgroundColor: "#FFEAA4", borderColor: "#F4C451", borderWidth: 2, borderRadius: 22, padding: 16 },
   quizIllustration: { minHeight: 132, flexDirection: "row", alignItems: "center", justifyContent: "space-evenly", backgroundColor: "#B8EDF3", borderRadius: 18, marginBottom: 14 },

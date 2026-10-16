@@ -3,6 +3,9 @@ import { FirebaseApp, getApp, getApps, initializeApp } from "firebase/app";
 import { Auth, getAuth, initializeAuth } from "firebase/auth";
 // @ts-ignore - exists at runtime on React Native, missing from the type definitions
 import { getReactNativePersistence } from "firebase/auth";
+import { Firestore, getFirestore } from "firebase/firestore";
+import { FirebaseStorage, getStorage } from "firebase/storage";
+import { Functions, getFunctions } from "firebase/functions";
 import { Platform } from "react-native";
 
 const firebaseConfig = {
@@ -23,6 +26,9 @@ export const firebaseConfigured = [
 
 let firebaseApp: FirebaseApp | null = null;
 let firebaseAuth: Auth | null = null;
+let firebaseFirestore: Firestore | null = null;
+let firebaseStorage: FirebaseStorage | null = null;
+let firebaseFunctions: Functions | null = null;
 
 if (firebaseConfigured) {
   firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
@@ -41,6 +47,13 @@ if (firebaseConfigured) {
       firebaseAuth = getAuth(firebaseApp);
     }
   }
+
+  firebaseFirestore = getFirestore(firebaseApp);
+  firebaseStorage = getStorage(firebaseApp);
+  firebaseFunctions = getFunctions(firebaseApp, "us-central1");
 }
 
 export const auth = firebaseAuth;
+export const firestore = firebaseFirestore;
+export const storage = firebaseStorage;
+export const cloudFunctions = firebaseFunctions;

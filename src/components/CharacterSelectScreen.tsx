@@ -42,17 +42,22 @@ const characters = [
 ];
 
 type Props = {
+  gradeLabel: string;
+  lessonTitle: string;
   onSelect: (characterId: string) => void;
 };
 
-export default function CharacterSelectScreen({ onSelect }: Props) {
+export default function CharacterSelectScreen({ gradeLabel, lessonTitle, onSelect }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.titleWrap}>
         <Text style={styles.title}>Who's shopping today?</Text>
-        <Text style={styles.subtitle}>Pick your character to start the lesson</Text>
+        <Text style={styles.subtitle}>
+          {gradeLabel} · {lessonTitle}
+        </Text>
+        <Text style={styles.lessonContext}>Pick your character to start this lesson.</Text>
       </View>
 
       <ScrollView
@@ -67,6 +72,7 @@ export default function CharacterSelectScreen({ onSelect }: Props) {
               key={character.id}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
+              soundEffect="select"
               onPress={() => setSelected(character.id)}
               style={({ pressed }) => [
                 styles.characterCard,
@@ -119,6 +125,7 @@ const styles = StyleSheet.create({
   titleWrap: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 12 },
   title: { color: "#4A2F22", fontSize: 28, fontWeight: "900" },
   subtitle: { color: "#6E675D", fontSize: 15, marginTop: 5 },
+  lessonContext: { color: "#759B57", fontSize: 14, fontWeight: "700", marginTop: 5 },
   list: { paddingHorizontal: 24, gap: 12, paddingBottom: 20 },
   characterCard: {
     flexDirection: "row",

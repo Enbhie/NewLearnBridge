@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /mission-submissions/{uid}/{submissionId}/evidence {
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)')
+        && request.resource.metadata.ownerUid == uid
+        && request.resource.metadata.submissionId == submissionId;
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow update: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

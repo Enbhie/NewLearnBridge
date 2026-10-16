@@ -12,6 +12,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { gradeLabels, type Grade } from "../data/offlineMissions";
 
 export type Difficulty = "easy" | "standard" | "challenge";
 
@@ -28,6 +29,7 @@ export type LearnerProfile = {
   childName: string;
   childBirthdate: string;
   selectedIcon: string;
+  grade?: Grade;
 };
 
 type Props = {
@@ -38,7 +40,10 @@ type Props = {
   screenTimeUsedSeconds: number;
   onBack: () => void;
   onSelectProfile: (id: string) => void;
-  onAddProfile: (profile: Omit<LearnerProfile, "id">) => Promise<void>;
+  onAddProfile: (
+    profile: Omit<LearnerProfile, "id" | "grade"> & { grade: Grade }
+  ) => Promise<void>;
+  onSetProfileGrade: (profileId: string, grade: Grade) => Promise<void>;
   onPreferencesChange: (preferences: AccountPreferences) => void;
   onNotificationPreferenceChange: (enabled: boolean) => Promise<void>;
   onResetPassword: () => Promise<void>;
@@ -95,6 +100,7 @@ export default function AccountSettingsScreen({
   onBack,
   onSelectProfile,
   onAddProfile,
+  onSetProfileGrade,
   onPreferencesChange,
   onNotificationPreferenceChange,
   onResetPassword,
@@ -107,6 +113,7 @@ export default function AccountSettingsScreen({
   const [day, setDay] = useState("");
   const [year, setYear] = useState("");
   const [icon, setIcon] = useState(profileIcons[0]);
+  const [grade, setGrade] = useState<Grade>("K");
   const [profileError, setProfileError] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
@@ -144,12 +151,14 @@ export default function AccountSettingsScreen({
         childName: newName.trim(),
         childBirthdate: `${year}-${month}-${day}`,
         selectedIcon: icon,
+        grade,
       });
       setNewName("");
       setMonth("");
       setDay("");
       setYear("");
       setIcon(profileIcons[0]);
+      setGrade("K");
       setShowAddProfile(false);
     } catch (error) {
       setProfileError(error instanceof Error ? error.message : "Could not save this profile.");
@@ -214,8 +223,12 @@ export default function AccountSettingsScreen({
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Pressable accessibilityRole="button" onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backText}>‹  Profile</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onBack}
+          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.backText}>Back</Text>
         </Pressable>
         <Text style={styles.title}>Account Settings</Text>
 
@@ -256,13 +269,46 @@ export default function AccountSettingsScreen({
                       profile.childBirthdate.slice(5, 7),
                       profile.childBirthdate.slice(8, 10),
                       profile.childBirthdate.slice(0, 4)
-                    ) ?? "Not set"}
+                    ) ?? "Not set"} · {profile.grade ? gradeLabels[profile.grade] : "Grade not set"}
                   </Text>
                 </View>
                 {isActive && <Text style={styles.activeLabel}>ACTIVE</Text>}
               </Pressable>
             );
           })}
+          {profiles.find((profile) => profile.id === activeProfileId) ? (
+            <View style={styles.profileGradeEditor}>
+              <Text style={styles.bodyLabel}>Grade level for {profiles.find((profile) => profile.id === activeProfileId)?.childName}</Text>
+              <View style={styles.gradeRow}>
+                {(Object.keys(gradeLabels) as Grade[]).map((grade) => {
+                  const activeProfile = profiles.find((profile) => profile.id === activeProfileId);
+                  const selected = activeProfile?.grade === grade;
+                  return (
+                    <Pressable
+                      key={grade}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => {
+                        if (activeProfileId && !selected) {
+                          void onSetProfileGrade(activeProfileId, grade).catch((error: unknown) => {
+                            Alert.alert(
+                              "Grade not saved",
+                              error instanceof Error ? error.message : "Check device storage and try again."
+                            );
+                          });
+                        }
+                      }}
+                      style={[styles.gradeOption, selected && styles.gradeOptionSelected]}
+                    >
+                      <Text style={[styles.gradeOptionText, selected && styles.gradeOptionTextSelected]}>
+                        {gradeLabels[grade]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
           {!showAddProfile ? (
             <Pressable
               accessibilityRole="button"
@@ -302,6 +348,25 @@ export default function AccountSettingsScreen({
                     />
                   </View>
                 ))}
+              </View>
+              <Text style={[styles.bodyLabel, styles.dateLabel]}>Child's grade</Text>
+              <View style={styles.gradeRow}>
+                {(Object.keys(gradeLabels) as Grade[]).map((value) => {
+                  const selected = grade === value;
+                  return (
+                    <Pressable
+                      key={value}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => setGrade(value)}
+                      style={[styles.gradeOption, selected && styles.gradeOptionSelected]}
+                    >
+                      <Text style={[styles.gradeOptionText, selected && styles.gradeOptionTextSelected]}>
+                        {gradeLabels[value]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
               <Text style={[styles.bodyLabel, styles.dateLabel]}>Choose an icon</Text>
               <View style={styles.iconRow}>
@@ -382,14 +447,14 @@ export default function AccountSettingsScreen({
               })}
             </View>
             <Text style={styles.hint}>
-              Counts active LearnBridge use and resets at local midnight. A 5-minute eye-rest break begins every 15 active minutes; break time is not counted.
+              Changing this limit will not reset today's usage. Counts active LearnBridge use and resets at local midnight. A 5-minute eye-rest break begins every 15 active minutes; break time is not counted.
             </Text>
           </View>
           <View style={styles.preferenceRow}>
             <View style={styles.preferenceCopy}>
               <Text style={styles.bodyLabel}>Eye-rest notifications</Text>
               <Text style={styles.hint}>
-                Your child gets a 5-minute break every 15 active minutes. On mobile, enable banners for an extra reminder when the break begins.
+                Your child gets a 5-minute break every 15 active minutes. Reminder banners require a development build; the app still works in Expo Go without them.
               </Text>
             </View>
             <Switch
@@ -512,8 +577,8 @@ export default function AccountSettingsScreen({
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#F1F4EF" },
   content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 },
-  backButton: { alignSelf: "flex-start", paddingVertical: 10, paddingRight: 14 },
-  backText: { color: "#28543A", fontSize: 16, fontWeight: "800" },
+  backButton: { alignSelf: "flex-start", minHeight: 42, borderRadius: 8, backgroundColor: "#C62828", alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
+  backText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
   title: { color: "#26352B", fontSize: 30, fontWeight: "900", marginBottom: 14 },
   section: { backgroundColor: "#FFFFFF", borderColor: "#D8E1D7", borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 12 },
   sectionTitle: { color: "#28543A", fontSize: 13, fontWeight: "900", marginBottom: 14 },
@@ -528,6 +593,7 @@ const styles = StyleSheet.create({
   profileCopy: { flex: 1 },
   profileName: { color: "#26352B", fontSize: 16, lineHeight: 22, fontWeight: "800" },
   activeLabel: { color: "#28543A", fontSize: 12, fontWeight: "900" },
+  profileGradeEditor: { paddingTop: 12 },
   outlineButton: { minHeight: 48, borderWidth: 1, borderColor: "#28543A", borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 12 },
   outlineButtonText: { color: "#28543A", fontSize: 15, fontWeight: "800" },
   addProfileForm: { backgroundColor: "#F4F7F3", borderColor: "#D8E1D7", borderWidth: 1, borderRadius: 9, padding: 14, marginTop: 12 },
@@ -537,6 +603,11 @@ const styles = StyleSheet.create({
   datePart: { flex: 1 },
   datePartLabel: { color: "#46564B", fontSize: 13, fontWeight: "700" },
   dateInput: { textAlign: "center", paddingHorizontal: 4 },
+  gradeRow: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 8 },
+  gradeOption: { minHeight: 40, borderWidth: 1, borderColor: "#87978B", borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 10, backgroundColor: "#FFFFFF" },
+  gradeOptionSelected: { backgroundColor: "#28543A", borderColor: "#28543A" },
+  gradeOptionText: { color: "#26352B", fontSize: 13, fontWeight: "700" },
+  gradeOptionTextSelected: { color: "#FFFFFF" },
   iconRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
   iconOption: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#E4F0DF", alignItems: "center", justifyContent: "center" },
   iconOptionSelected: { borderWidth: 2, borderColor: "#587449" },

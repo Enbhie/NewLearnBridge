@@ -26,10 +26,41 @@ In the output, you'll find options to open the app in a
 ## Firebase Authentication
 
 1. In the Firebase Console, create a project, add a Web app, and enable **Email/Password** under Authentication > Sign-in method.
-2. Copy `.env.example` to `.env.local` and fill in the Firebase Web app's API key, Auth domain, project ID, and app ID. Storage bucket and sender ID are optional for Auth.
+2. Copy `.env.example` to `.env.local` and fill in the Firebase Web app's API key, Auth domain, project ID, and app ID. The Storage bucket is required for parent mission photo review; sender ID is optional.
 3. Restart Expo after changing the environment file. New accounts receive Firebase's email verification link and must verify before opening the main menu.
 
 Learner profiles are stored locally on the device under the Firebase user ID. Firebase Auth does not send numeric email codes; the verification flow uses Firebase's built-in link.
+
+## Parent mission photo review
+
+Kindergarten missions **Count the Items**, **First Letter**, and **Letter Tracing** send the selected photo to the verified email address on the signed-in parent/guardian account. The child then sees a waiting screen until the parent approves the work or asks for another photo. This flow requires Firebase Cloud Functions, Firestore, Storage, and a Resend account; it will not send email until the backend is deployed and configured.
+
+1. In Firebase, enable Cloud Firestore and Cloud Storage, and upgrade the project to the Blaze plan if Firebase requires it for Cloud Functions.
+2. Install the Firebase CLI, sign in, and select the same project used by `.env.local`:
+
+   ```bash
+   npm install --global firebase-tools
+   firebase login
+   firebase use --add
+   ```
+
+3. In Resend, verify a sending domain. Set the sender address to an address on that verified domain:
+
+   ```bash
+   firebase functions:secrets:set RESEND_API_KEY
+   ```
+
+   Enter the Resend API key at the prompt. Do not place it in `.env.local` or commit it. On the first deployment, configure `MISSION_EMAIL_FROM` when prompted (for example, `LearnBridge <missions@your-verified-domain.example>`). `MISSION_REVIEW_BASE_URL` is optional; by default, the functions use the deployed `us-central1` review URL.
+
+4. Install and build the backend, then deploy the backend and security rules:
+
+   ```bash
+   npm --prefix functions install
+   npm --prefix functions run build
+   firebase deploy --only functions,firestore:rules,storage
+   ```
+
+The parent email contains the photo attachment and a private review link. Opening the link only displays the submission; the parent must select an approval decision on the page. After a decision, the child app receives the result when it is online. The backend removes the uploaded Storage copy after review; the email attachment remains in the parent's mailbox.
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
