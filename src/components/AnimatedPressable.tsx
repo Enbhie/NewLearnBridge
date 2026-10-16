@@ -25,14 +25,9 @@ export function AnimatedPressable({
   ...props
 }: AnimatedPressableProps) {
   const scale = useRef(new Animated.Value(1)).current;
-<<<<<<< HEAD
   const baseStyle = typeof style === "function"
     ? style({ pressed: false, hovered: false })
     : style;
-=======
-  const baseStyle =
-    typeof style === "function" ? style({ pressed: false, hovered: false }) : style;
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
   const flattenedStyle = StyleSheet.flatten(baseStyle);
   const layoutStyle: ViewStyle = {
     alignSelf: flattenedStyle?.alignSelf,

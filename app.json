@@ -1,4 +1,4 @@
-{
+﻿{
   "expo": {
     "name": "LearnBridge",
     "slug": "LearnBridge",
@@ -12,14 +12,13 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FFF8E7",
+        "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA",
         "android.permission.CAMERA"
       ]
     },
@@ -56,9 +55,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#B6DAD7",
+          "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 300
+          "imageWidth": 96
         }
       ]
     ],

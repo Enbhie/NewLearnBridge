@@ -40,19 +40,14 @@ import AccountSettingsScreen, {
 import { AnimatedPressable as Pressable } from "../components/AnimatedPressable";
 import CharacterSelectScreen from "../components/CharacterSelectScreen";
 import LessonCompleteScreen from "../components/LessonCompleteScreen";
-<<<<<<< HEAD
 import KindergartenLessonsScreen, {
   kindergartenLessonCount,
 } from "../components/KindergartenLessonsScreen";
-=======
-import KindergartenLessonsScreen from "../components/KindergartenLessonsScreen";
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
 import LessonScreen from "../components/LessonScreen";
 import QuizScreen from "../components/QuizScreen";
 import ResultsScreen from "../components/ResultsScreen";
 import { getCompletedMissions, markMissionComplete } from "../data/missionProgress";
 import {
-<<<<<<< HEAD
   listenToMissionReview,
   submitMissionPhotoForReview,
   type MissionReview,
@@ -60,10 +55,6 @@ import {
 import {
   getMissionsForGrade,
   gradeLabels,
-=======
-  gradeLabels,
-  offlineMissions,
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
   type Grade,
   type OfflineMission,
 } from "../data/offlineMissions";
@@ -73,14 +64,10 @@ import {
   type CategoryId,
 } from "../data/learningContent";
 import { auth, firebaseConfigured } from "../firebase";
-<<<<<<< HEAD
 import {
   setBackgroundMusic,
   type BackgroundMusicTrack,
 } from "../utils/backgroundMusic";
-=======
-import { prepareBackgroundMusic } from "../utils/backgroundMusic";
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
 
 let notificationsModulePromise:
   | Promise<typeof import("expo-notifications") | null>
@@ -1209,7 +1196,6 @@ function MenuScreen({
   screen: Screen;
   setScreen: (s: Screen) => void;
 }) {
-<<<<<<< HEAD
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const gradeLessons = (Object.entries(lessonContent) as [CategoryId, (typeof lessonContent)[CategoryId]][])
@@ -1226,11 +1212,6 @@ function MenuScreen({
         ).length /
           gradeLessons.length) * 100
       : 0;
-=======
-  const gradeLessons = (Object.entries(lessonContent) as [CategoryId, (typeof lessonContent)[CategoryId]][])
-    .filter(([, content]) => content.grade === grade);
-  const availableCategories = gradeLessons.map(([id]) => id);
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
 
   return (
     <SafeAreaView style={styles.appPage}>
@@ -1260,7 +1241,6 @@ function MenuScreen({
         </View>
 
         {!offlineMode && (
-<<<<<<< HEAD
           <View style={styles.lessonsCard}>
             <View style={styles.lessonBoardHeader}>
               <View style={styles.lessonBoardIcon}>
@@ -1296,59 +1276,6 @@ function MenuScreen({
                     <Text style={[styles.lessonPreviewHeading, isLocked && styles.lockedGradeLessonText]}>
                       {isComplete ? "✓ COMPLETED" : isLocked ? "🔒 LOCKED" : `STEP ${index + 1} · READY`}
                     </Text>
-=======
-          <>
-            <View style={styles.lessonsCard}>
-              <Text style={styles.cardHeading}>Choose a subject</Text>
-              <Text style={styles.cardBody}>
-                {grade ? `Your child's grade: ${gradeLabels[grade]}. ` : ""}
-                Choose from lessons made for this grade.
-              </Text>
-              {availableCategories.length > 0 ? (
-                <View style={styles.subjectGrid}>
-                  {availableCategories.map((id) => {
-                    const meta = categoryMeta[id];
-                    const selected = id === selectedCategory;
-                    return (
-                      <Pressable
-                        key={id}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        onPress={() => onSelectCategory(id)}
-                        style={({ pressed }) => [
-                          styles.subjectOption,
-                          selected && styles.subjectOptionSelected,
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <Text style={styles.subjectEmoji}>{meta.emoji}</Text>
-                        <Text style={[styles.subjectLabel, selected && styles.subjectLabelSelected]}>
-                          {meta.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : (
-                <View style={styles.noGradeLessons}>
-                  <Text style={styles.noGradeLessonsTitle}>
-                    No online lessons for {grade ? gradeLabels[grade] : "this grade"} yet
-                  </Text>
-                  <Text style={styles.cardBody}>
-                    We only show lessons that match your child's selected grade. Try the available curriculum or offline missions below.
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {gradeLessons.length > 0 ? (
-              <View style={styles.lessonsCard}>
-                <Text style={styles.cardHeading}>
-                  Lesson Plans · {grade ? gradeLabels[grade] : ""}
-                </Text>
-                {gradeLessons.map(([categoryId, content]) => (
-                  <View style={styles.gradeLessonCard} key={categoryId}>
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
                     <Text style={styles.lessonPreviewHeading}>
                       {categoryMeta[categoryId].emoji} {categoryMeta[categoryId].label}
                     </Text>
@@ -1359,7 +1286,6 @@ function MenuScreen({
                       <Text style={styles.cardBody}>{content.storyLine}</Text>
                       <Text style={styles.lessonPreviewHint}>Learn: {content.rememberText}</Text>
                     </View>
-<<<<<<< HEAD
                     {isLocked ? (
                       <View style={styles.lockedLesson}>
                         <Text style={styles.lockedLessonText}>
@@ -1393,27 +1319,6 @@ function MenuScreen({
               </Text>
             )}
           </View>
-=======
-                    <ActionButton
-                      onPress={() => {
-                        onSelectCategory(categoryId);
-                        setScreen("character-select");
-                      }}
-                      variant="primary"
-                    >
-                      {`▶ Start ${content.title}`}
-                    </ActionButton>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            {grade === "K" ? (
-              <ActionButton onPress={() => setScreen("kinder-lessons")} variant="secondary">
-                OPEN KINDER CURRICULUM
-              </ActionButton>
-            ) : null}
-          </>
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
         )}
 
         {offlineMode ? (
@@ -1450,7 +1355,6 @@ function MenuScreen({
   );
 }
 
-<<<<<<< HEAD
   function MissionsScreen({
     screen,
     setScreen,
@@ -1462,21 +1366,6 @@ function MenuScreen({
   })
   {
   const router = useRouter();
-=======
-  const GRADES: Grade[] = ["K", "1", "2", "3"];
-  function MissionsScreen({
-    screen,
-    setScreen,
-    initialGrade,
-  }: {
-    screen: Screen;
-    setScreen: (s: Screen) => void;
-    initialGrade: Grade;
-  })
-  {
-  const router = useRouter();
-  const [grade, setGrade] = useState<Grade>(initialGrade);
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
   const [completed, setCompleted] = useState<string[]>([]);
   const [pending, setPending] = useState<OfflineMission | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -2108,15 +1997,12 @@ function GradeSetupTutorialScreen({
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("math");
-<<<<<<< HEAD
   const [kindergartenCategory, setKindergartenCategory] = useState<CategoryId | null>(null);
   const backgroundMusicTrack = getBackgroundMusicTrack(
     screen,
     selectedCategory,
     kindergartenCategory
   );
-=======
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -2148,14 +2034,9 @@ export default function App() {
   const notificationsEnabledRef = useRef(preferences.notificationsEnabled);
 
   useEffect(() => {
-<<<<<<< HEAD
     setBackgroundMusic(backgroundMusicTrack);
     return () => setBackgroundMusic(null);
   }, [backgroundMusicTrack]);
-=======
-    return prepareBackgroundMusic();
-  }, []);
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
 
   useEffect(() => {
     if (!auth) return;
@@ -2206,11 +2087,7 @@ export default function App() {
           }
           if (user.emailVerified) {
             setScreen((currentScreen) => {
-<<<<<<< HEAD
               const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
-=======
-              const canRedirect = ["home", "login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
               if (!canRedirect) return currentScreen;
               return activeProfile?.grade ? "menu" : "grade-selection";
             });
@@ -2238,15 +2115,11 @@ export default function App() {
           if (auth?.currentUser?.uid === user.uid) setPreferencesReady(true);
         });
 
-<<<<<<< HEAD
       if (!user.emailVerified) {
         setScreen((currentScreen) =>
           currentScreen === "home" ? currentScreen : "verify-email"
         );
       }
-=======
-      if (!user.emailVerified) setScreen("verify-email");
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
     });
   }, []);
 
@@ -2508,12 +2381,7 @@ export default function App() {
     setScreen("menu");
   };
 
-<<<<<<< HEAD
   const handleCompleteLesson = async (lessonId: string) => {
-=======
-  const handlePreferencesChange = (nextPreferences: AccountPreferences) => {
-    setPreferences(nextPreferences);
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
     const currentUser = auth?.currentUser;
     if (!currentUser || !activeProfileId || !lessonProgressReady) {
       Alert.alert("Progress not ready", "Please wait for your learner profile to finish loading.");
@@ -3009,17 +2877,12 @@ export default function App() {
       <MissionsScreen
         screen={screen}
         setScreen={setScreen}
-<<<<<<< HEAD
         grade={childGrade ?? "K"}
-=======
-        initialGrade={childGrade ?? "K"}
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
       />
     );
   }
 
   if (screen === "kinder-lessons") {
-<<<<<<< HEAD
     return (
       <KindergartenLessonsScreen
         onBack={() => {
@@ -3033,9 +2896,6 @@ export default function App() {
         onCompleteLesson={(lessonId) => void handleCompleteLesson(lessonId)}
       />
     );
-=======
-    return <KindergartenLessonsScreen onBack={() => setScreen("menu")} />;
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
   }
 
   if (screen === "tutorial") {
@@ -3186,7 +3046,6 @@ const styles = StyleSheet.create({
   streakBadgeText: { color: "#173B53", fontSize: 13, fontWeight: "800" },
   lessonsCard: { backgroundColor: "#FFF0AA", borderColor: "#F3C451", borderWidth: 2, borderRadius: 20, paddingBottom: 13, marginBottom: 12, paddingHorizontal: 15, paddingTop: 15 },
   cardHeading: { color: "#173B53", fontSize: 17, fontWeight: "900", marginBottom: 11, textAlign: "center" },
-<<<<<<< HEAD
   lessonBoardHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
   lessonBoardIcon: { width: 54, height: 54, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "#B8EDF3" },
   lessonBoardIconText: { fontSize: 30 },
@@ -3198,17 +3057,6 @@ const styles = StyleSheet.create({
   lockedGradeLessonCard: { borderColor: "#B9C6C4", borderWidth: 1 },
   lockedGradeLessonText: { color: "#6E8190" },
   gradeLessonCardLandscape: { flexBasis: "48%", flexGrow: 1, marginBottom: 0 },
-=======
-  subjectGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  subjectOption: { flexGrow: 1, flexBasis: "30%", minHeight: 74, alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: 2, borderColor: "#FFFFFF", backgroundColor: "#FFF9E9", padding: 8 },
-  subjectOptionSelected: { borderColor: "#258EA3", backgroundColor: "#D5F5EB" },
-  subjectEmoji: { fontSize: 25, marginBottom: 4 },
-  subjectLabel: { color: "#36566A", fontSize: 12, fontWeight: "800", textAlign: "center" },
-  subjectLabelSelected: { color: "#173B53" },
-  noGradeLessons: { backgroundColor: "#FFF9E9", borderRadius: 14, padding: 12, marginTop: 12 },
-  noGradeLessonsTitle: { color: "#173B53", fontSize: 16, lineHeight: 22, fontWeight: "900", marginBottom: 5 },
-  gradeLessonCard: { backgroundColor: "#FFF9E9", borderRadius: 16, padding: 13, marginBottom: 12 },
->>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
   lessonPreviewTitle: { color: "#173B53", fontSize: 18, fontWeight: "900", marginBottom: 5 },
   lessonContentPreview: { backgroundColor: "#FFF9E9", borderRadius: 14, padding: 12, marginTop: 12, marginBottom: 12 },
   lessonPreviewHeading: { color: "#315C4A", fontSize: 12, fontWeight: "900", marginBottom: 5 },
