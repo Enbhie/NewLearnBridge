@@ -6,7 +6,11 @@
     "@expo/ui": "~57.0.25",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@tensorflow/tfjs": "^4.22.0",
+<<<<<<< HEAD
     "expo": "~57.0.30",
+=======
+    "expo": "^57.0.27",
+>>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
     "expo-audio": "~57.0.5",
     "expo-camera": "~57.0.6",
     "expo-constants": "~57.0.18",

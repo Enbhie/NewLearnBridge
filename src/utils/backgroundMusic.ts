@@ -1,4 +1,5 @@
 import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
+<<<<<<< HEAD
 
 type BackgroundMusicPlayer = ReturnType<typeof createAudioPlayer>;
 export type BackgroundMusicTrack =
@@ -52,6 +53,37 @@ export function setBackgroundMusic(track: BackgroundMusicTrack | null) {
         console.error("Unable to start background music", error);
       }
     });
+=======
+import { Platform } from "react-native";
+
+type BackgroundMusicPlayer = ReturnType<typeof createAudioPlayer>;
+
+let backgroundMusic: BackgroundMusicPlayer | undefined;
+
+export function prepareBackgroundMusic() {
+  const player = createAudioPlayer(
+    require("../../assets/sounds/background-music.wav")
+  );
+  backgroundMusic = player;
+  player.loop = true;
+  player.volume = 0.35;
+
+  let isCurrent = true;
+  void setAudioModeAsync({ playsInSilentMode: true })
+    .then(() => {
+      if (isCurrent && Platform.OS !== "web") player.play();
+    })
+    .catch((error: unknown) => {
+      console.error("Unable to configure background music", error);
+    });
+
+  return () => {
+    isCurrent = false;
+    if (backgroundMusic === player) backgroundMusic = undefined;
+    player.pause();
+    player.remove();
+  };
+>>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
 }
 
 export function startBackgroundMusic() {

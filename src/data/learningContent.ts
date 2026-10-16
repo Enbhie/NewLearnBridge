@@ -45,8 +45,13 @@ export const categoryMeta: Record<
   reading: {
     label: "Reading Comprehension",
     emoji: "📖",
+<<<<<<< HEAD
     summary: "Letters, sounds, blending, and building words.",
     lessonTitle: "Alphabet: Letter Names, Sounds, and Blending",
+=======
+    summary: "Stories, details, and finding the main idea.",
+    lessonTitle: "Story Clues",
+>>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
   },
   science: {
     label: "Science",
@@ -74,6 +79,7 @@ export const lessonContent: Record<CategoryId, LessonContent> = {
   },
   reading: {
     grade: "1",
+<<<<<<< HEAD
     title: "Alphabet: Letter Names, Sounds, and Blending",
     theme: "WORD-BUILDING GAME",
     storyTitle: "WORD-BUILDING GAME",
@@ -85,6 +91,20 @@ export const lessonContent: Record<CategoryId, LessonContent> = {
       { id: "cat", emoji: "🐱", name: "CAT" },
       { id: "sun", emoji: "☀️", name: "SUN" },
       { id: "dog", emoji: "🐶", name: "DOG" },
+=======
+    title: "Story Clues",
+    theme: "READING CORNER",
+    storyTitle: "READING CORNER",
+    storyLine: "The shy puppy hid behind the chair and peeked at the new toy.",
+    rememberTitle: "Remember This",
+    rememberText:
+      "Look for the main idea and details that support it. Clues in the story can tell you how a character feels.",
+    equation: "Main idea: The puppy is curious and excited about the new toy.",
+    items: [
+      { id: "title", emoji: "📚", name: "Title" },
+      { id: "detail", emoji: "🔍", name: "Detail" },
+      { id: "idea", emoji: "🧠", name: "Main Idea" },
+>>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
     ],
   },
   science: {
@@ -109,7 +129,11 @@ export const quizQuestions: Record<CategoryId, CurriculumQuestion[]> = {
     {
       id: "q1",
       character: "Bea",
+<<<<<<< HEAD
       prompt: "bought a Royal for ₱7 and paid with a ₱10 bill. How much change will she get?",
+=======
+      prompt: "bought a candy for ₱7 and paid with a ₱10 bill. How much change will she get?",
+>>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
       displayText: "₱10 − ₱7 = ?",
       options: ["2", "3", "4", "5"],
       correctAnswer: "3",
@@ -150,11 +174,19 @@ export const mathQuizQuestionsByDifficulty: Record<QuizDifficulty, CurriculumQue
     {
       id: "q1-easy",
       character: "Bea",
+<<<<<<< HEAD
       prompt: "bought a candy for ₱3 and paid with a ₱5 bill. How much change will she get?",
       displayText: "₱5 − ₱3 = ?",
       options: ["1", "2", "3", "4"],
       correctAnswer: "2",
       hint: "Subtract the candy's price from your payment!",
+=======
+      prompt: "bought a candy for ₱2 and paid with a ₱5 bill. How much change will she get?",
+      displayText: "₱5 − ₱2 = ?",
+      options: ["2", "3", "4", "5"],
+      correctAnswer: "3",
+      hint: "Subtract the price from your payment!",
+>>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
     },
   ],
   standard: quizQuestions.math,
@@ -162,11 +194,19 @@ export const mathQuizQuestionsByDifficulty: Record<QuizDifficulty, CurriculumQue
     {
       id: "q1-challenge",
       character: "Bea",
+<<<<<<< HEAD
       prompt: "bought a Royal for ₱7 and cookies for ₱5, then paid with a ₱20 bill. How much change will she get?",
       displayText: "₱20 − (₱7 + ₱5) = ?",
       options: ["6", "7", "8", "9"],
       correctAnswer: "8",
       hint: "Add the item prices first, then subtract the total from ₱20.",
+=======
+      prompt: "bought a book for ₱13 and paid with a ₱20 bill. How much change will she get?",
+      displayText: "₱20 − ₱13 = ?",
+      options: ["5", "6", "7", "8"],
+      correctAnswer: "7",
+      hint: "Subtract the price from your payment!",
+>>>>>>> 0e8b6827e77cdab5996ad5e843d7ccfc7c46a972
     },
   ],
 };
