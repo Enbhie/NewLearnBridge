@@ -420,7 +420,7 @@ export default function AccountSettingsScreen({
               );
             })}
           </View>
-          <Text style={styles.hint}>Difficulty changes the number challenge in the quiz.</Text>
+          <Text style={styles.hint}>Difficulty changes Grade 2 lesson questions and the number challenge in quizzes.</Text>
           <View style={styles.screenTimeBlock}>
             <Text style={styles.bodyLabel}>Daily screen time limit</Text>
             <Text style={styles.hint}>

@@ -35,7 +35,7 @@ export function setBackgroundMusic(track: BackgroundMusicTrack | null) {
   const player = createAudioPlayer(tracks[track]);
   backgroundMusic = player;
   player.loop = true;
-  player.volume = 0.28;
+  player.volume = 0.4;
   const isCurrentPlayer = () => activeTrack === track && backgroundMusic === player;
 
   audioMode ??= setAudioModeAsync({ playsInSilentMode: true }).catch((error: unknown) => {

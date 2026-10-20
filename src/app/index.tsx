@@ -43,6 +43,9 @@ import LessonCompleteScreen from "../components/LessonCompleteScreen";
 import KindergartenLessonsScreen, {
   kindergartenLessonCount,
 } from "../components/KindergartenLessonsScreen";
+import GradeTwoLessonsScreen, {
+  gradeTwoLessonCount,
+} from "../components/GradeTwoLessonsScreen";
 import LessonScreen from "../components/LessonScreen";
 import QuizScreen from "../components/QuizScreen";
 import ResultsScreen from "../components/ResultsScreen";
@@ -108,6 +111,7 @@ type Screen =
   | "settings"
   | "missions"
   | "kinder-lessons"
+  | "grade2-lessons"
   | "tutorial"
   | "character-select"
   | "lesson"
@@ -124,14 +128,14 @@ function getCategoryMusicTrack(category: CategoryId): BackgroundMusicTrack {
 function getBackgroundMusicTrack(
   screen: Screen,
   category: CategoryId,
-  kindergartenCategory: CategoryId | null
+  curriculumCategory: CategoryId | null
 ): BackgroundMusicTrack | null {
   if (screen === "home") return "home";
   if (["login", "signup", "forgot-password", "verify-email"].includes(screen)) {
     return "login";
   }
-  if (screen === "kinder-lessons" && kindergartenCategory) {
-    return getCategoryMusicTrack(kindergartenCategory);
+  if (["kinder-lessons", "grade2-lessons"].includes(screen) && curriculumCategory) {
+    return getCategoryMusicTrack(curriculumCategory);
   }
   if (["lesson", "quiz", "results", "lesson-complete"].includes(screen)) {
     return getCategoryMusicTrack(category);
@@ -141,6 +145,7 @@ function getBackgroundMusicTrack(
       "menu",
       "missions",
       "kinder-lessons",
+      "grade2-lessons",
       "character-select",
     ].includes(screen)
   ) {
@@ -1206,6 +1211,12 @@ function MenuScreen({
         (completedLessonIds.filter((id) => id.startsWith("kindergarten:")).length /
           kindergartenLessonCount) * 100
       )
+    : grade === "2"
+      ? Math.min(
+          100,
+          (completedLessonIds.filter((id) => id.startsWith("grade:2:online:")).length /
+            gradeTwoLessonCount) * 100
+        )
     : gradeLessons.length
       ? (gradeLessons.filter(([categoryId]) =>
           completedLessonIds.includes(`grade:${grade}:${categoryId}`)
@@ -1312,6 +1323,10 @@ function MenuScreen({
             ) : grade === "K" ? (
               <ActionButton onPress={() => setScreen("kinder-lessons")} variant="secondary">
                 OPEN KINDER CURRICULUM
+              </ActionButton>
+            ) : grade === "2" ? (
+              <ActionButton onPress={() => setScreen("grade2-lessons")} variant="secondary">
+                OPEN GRADE 2 ONLINE LESSONS
               </ActionButton>
             ) : (
               <Text style={styles.cardBody}>
@@ -1997,11 +2012,11 @@ function GradeSetupTutorialScreen({
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("math");
-  const [kindergartenCategory, setKindergartenCategory] = useState<CategoryId | null>(null);
+  const [curriculumCategory, setCurriculumCategory] = useState<CategoryId | null>(null);
   const backgroundMusicTrack = getBackgroundMusicTrack(
     screen,
     selectedCategory,
-    kindergartenCategory
+    curriculumCategory
   );
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
@@ -2886,11 +2901,26 @@ export default function App() {
     return (
       <KindergartenLessonsScreen
         onBack={() => {
-          setKindergartenCategory(null);
+          setCurriculumCategory(null);
           setScreen("menu");
         }}
-        onMusicCategoryChange={setKindergartenCategory}
+        onMusicCategoryChange={setCurriculumCategory}
         screenTimeLimitMinutes={preferences.screenTimeLimitMinutes}
+        completedLessonIds={completedLessonIds}
+        lessonProgressReady={lessonProgressReady}
+        onCompleteLesson={(lessonId) => void handleCompleteLesson(lessonId)}
+      />
+    );
+  }
+
+  if (screen === "grade2-lessons") {
+    return (
+      <GradeTwoLessonsScreen
+        onBack={() => {
+          setCurriculumCategory(null);
+          setScreen("menu");
+        }}
+        onMusicCategoryChange={setCurriculumCategory}
         completedLessonIds={completedLessonIds}
         lessonProgressReady={lessonProgressReady}
         onCompleteLesson={(lessonId) => void handleCompleteLesson(lessonId)}

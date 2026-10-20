@@ -31,6 +31,10 @@ In the output, you'll find options to open the app in a
 
 Learner profiles are stored locally on the device under the Firebase user ID. Firebase Auth does not send numeric email codes; the verification flow uses Firebase's built-in link.
 
+## Grade 2 online lessons
+
+Grade 2 learners can open quarter-based online lessons from the Lesson Board. Reading covers phonemic awareness and story elements, text features and sequence, critical thinking and text types, and independent reading. Math covers whole numbers and place value, addition and subtraction, multiplication/division/fractions, and measurement/geometry/data. Science covers living things and their environment, matter and the physical world, and Earth and sky. Each quarter includes 10 questions at each Easy, Standard, and Challenge difficulty; question order and answer choices are randomized for each play. At the end of a quarter, learners can raise or lower the saved difficulty. Lessons unlock in order within each subject, and completion progress is saved separately for each learner profile.
+
 ## Parent mission photo review
 
 Kindergarten missions **Count the Items**, **First Letter**, and **Letter Tracing** send the selected photo to the verified email address on the signed-in parent/guardian account. The child then sees a waiting screen until the parent approves the work or asks for another photo. This flow requires Firebase Cloud Functions, Firestore, Storage, and a Resend account; it will not send email until the backend is deployed and configured.
