@@ -17,6 +17,7 @@ import {
     type User,
 } from "firebase/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
+import GradeOneLessonsScreen, { gradeOneLessonCount } from "../components/GradeOneLessonsScreen";
 import {
     ActivityIndicator,
     Alert,
@@ -112,6 +113,7 @@ type Screen =
   | "missions"
   | "kinder-lessons"
   | "grade2-lessons"
+  | "grade1-lessons"
   | "tutorial"
   | "character-select"
   | "lesson"
@@ -134,7 +136,7 @@ function getBackgroundMusicTrack(
   if (["login", "signup", "forgot-password", "verify-email"].includes(screen)) {
     return "login";
   }
-  if (["kinder-lessons", "grade2-lessons"].includes(screen) && curriculumCategory) {
+  if (["kinder-lessons", "grade1-lessons", "grade2-lessons"].includes(screen) && curriculumCategory) {
     return getCategoryMusicTrack(curriculumCategory);
   }
   if (["lesson", "quiz", "results", "lesson-complete"].includes(screen)) {
@@ -145,6 +147,7 @@ function getBackgroundMusicTrack(
       "menu",
       "missions",
       "kinder-lessons",
+      "grade1-lessons",
       "grade2-lessons",
       "character-select",
     ].includes(screen)
@@ -1203,14 +1206,22 @@ function MenuScreen({
 }) {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
-  const gradeLessons = (Object.entries(lessonContent) as [CategoryId, (typeof lessonContent)[CategoryId]][])
-    .filter(([, content]) => content.grade === grade);
+  const gradeLessons = grade === "1"
+    ? []
+    : (Object.entries(lessonContent) as [CategoryId, (typeof lessonContent)[CategoryId]][])
+        .filter(([, content]) => content.grade === grade);
   const lessonProgress = grade === "K"
     ? Math.min(
         100,
         (completedLessonIds.filter((id) => id.startsWith("kindergarten:")).length /
           kindergartenLessonCount) * 100
       )
+          : grade === "1"
+      ? Math.min(
+          100,
+          (completedLessonIds.filter((id) => id.startsWith("grade:1:online:")).length /
+            gradeOneLessonCount) * 100
+        )
     : grade === "2"
       ? Math.min(
           100,
@@ -1260,7 +1271,7 @@ function MenuScreen({
               <View style={styles.lessonBoardCopy}>
                 <Text style={styles.lessonBoardTitle}>Lesson Board</Text>
                 <Text style={styles.cardBody}>
-                  {grade ? gradeLabels[grade] : "Choose a subject"} · Math, Reading Comprehension, and Science
+                  {grade ? gradeLabels[grade] : "Choose a subject"} · {grade === "1" ? "Reading, Language, Math, Community, and Good Manners" : "Math, Reading Comprehension, and Science"}
                 </Text>
               </View>
             </View>
@@ -1324,6 +1335,10 @@ function MenuScreen({
               <ActionButton onPress={() => setScreen("kinder-lessons")} variant="secondary">
                 OPEN KINDER CURRICULUM
               </ActionButton>
+                          ) : grade === "1" ? (
+              <ActionButton onPress={() => setScreen("grade1-lessons")} variant="secondary">
+                OPEN GRADE 1 ONLINE LESSONS
+              </ActionButton>
             ) : grade === "2" ? (
               <ActionButton onPress={() => setScreen("grade2-lessons")} variant="secondary">
                 OPEN GRADE 2 ONLINE LESSONS
@@ -1342,9 +1357,13 @@ function MenuScreen({
             <Text style={styles.cardBody}>
               Online lessons are hidden. Your local math missions are ready to play.
             </Text>
-            {grade === "K" ? (
+                {grade === "K" ? (
               <ActionButton onPress={() => setScreen("kinder-lessons")} variant="secondary">
                 OPEN KINDER CURRICULUM
+              </ActionButton>
+            ) : grade === "1" ? (
+              <ActionButton onPress={() => setScreen("grade1-lessons")} variant="secondary">
+                OPEN GRADE 1 ONLINE LESSONS
               </ActionButton>
             ) : null}
             <ActionButton onPress={() => setScreen("missions")}>
@@ -2912,10 +2931,28 @@ export default function App() {
       />
     );
   }
-
+  if (screen === "grade1-lessons") {
+    return (
+      <GradeOneLessonsScreen
+        onBack={() => {
+          setCurriculumCategory(null);
+          setScreen("menu");
+        }}
+        onMusicCategoryChange={setCurriculumCategory}
+        screenTimeLimitMinutes={preferences.screenTimeLimitMinutes}
+        completedLessonIds={completedLessonIds}
+        lessonProgressReady={lessonProgressReady}
+        onCompleteLesson={(lessonId) => void handleCompleteLesson(lessonId)}
+      />
+    );
+  }
   if (screen === "grade2-lessons") {
     return (
       <GradeTwoLessonsScreen
+        difficulty={preferences.difficulty}
+        onDifficultyChange={(difficulty) => {
+          void handlePreferencesChange({ ...preferences, difficulty });
+        }}
         onBack={() => {
           setCurriculumCategory(null);
           setScreen("menu");

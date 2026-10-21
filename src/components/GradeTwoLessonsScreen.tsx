@@ -19,8 +19,6 @@ type Challenge = {
   explanation: string;
 };
 
-const difficultyOrder: LessonDifficulty[] = ["easy", "standard", "challenge"];
-
 type Lesson = {
   id: string;
   title: string;
@@ -73,7 +71,7 @@ const subjects: Subject[] = [
             q("Which word is an action word (verb)?", "runs", "blue", "table", "An action word tells what someone does.", "Runs names an action."),
             q("Which sound begins the Filipino word araw?", "/a/", "/b/", "/m/", "Listen to the first sound in araw.", "Araw begins with the /a/ sound."),
             q("Which word names a person?", "teacher", "jump", "yellow", "A noun names a person, place, animal, or thing.", "Teacher names a person."),
-            q("Which word is a common noun?", "city", "Manila", "person", "A common noun names a general person, place, or thing.", "City is a general place name."),
+            q("Which word is a common noun?", "city", "Manila", "Jairus", "A common noun names a general person, place, or thing.", "City is a general place name."),
             q("Which word completes the phrase: ___ apple?", "an", "a", "the", "Apple begins with a vowel sound.", "Use an before a vowel sound."),
             q("Which word names a place in a story?", "school", "laughs", "gentle", "A setting tells where a story happens.", "School can name a story's place."),
             q("Which is an environmental sound?", "A bird chirping", "A green leaf", "A round ball", "Think of a sound you might hear outside.", "A bird chirping is a sound in the environment."),
@@ -628,86 +626,6 @@ function getRoundQuestions(lesson: Lesson, difficulty: LessonDifficulty): Challe
     }));
 }
 
-function getQuestionPicture(
-  category: CategoryId,
-  prompt: string,
-  answer: string
-): string | null {
-  const text = `${prompt} ${answer}`.toLowerCase();
-
-  if (/\bbird\b|\bchirp/.test(text)) return "🐦🎵";
-  if (/\bcity\b/.test(text)) return "🏙️";
-  if (/\bapple\b/.test(text)) return "🍎";
-  if (/\bteacher\b/.test(text)) return "👩‍🏫🗣️🙋";
-  if (/\bclap|claps|clapping/.test(text)) return "🧒👏";
-
-  if (category === "reading") {
-    if (/\baraw\b|\bsun\b/.test(text)) return "☀️";
-    if (/\bbahay\b|\bfarm\b/.test(text)) return "🏠";
-    if (/\bbell\b/.test(text)) return "🔔";
-    if (/\bpuppy\b|\bdog\b/.test(text)) return "🐶";
-    if (/\bbeach\b/.test(text)) return "🏖️";
-    if (/\bplanting\b|\bseeds?\b|\bsoil\b/.test(text)) return "🌱";
-    if (/\bruns?\b/.test(text)) return "🏃";
-    if (/\bschool\b|\bclassroom\b/.test(text)) return "🏫";
-    if (/place in a story|setting/.test(text)) return "📍";
-    if (/theme|message/.test(text)) return "💡";
-    if (/\bbook\b|\bcover\b|\bchapter\b|\btitle\b|\bstory\b|\bcharacter\b|\bsetting\b|\btheme\b|\bplot\b/.test(text)) {
-      return "📖";
-    }
-    if (/\bletter\b|\bphoneme\b|\bvowel\b|\brhyme\b/.test(text)) return "🔤";
-    return null;
-  }
-
-  if (category === "math") {
-    if (/₱|money|price|pay|change|buy|coin|bill|store/.test(text)) return "🪙";
-    if (/triangle/.test(text)) return "🔺";
-    if (/circle/.test(text)) return "🔵";
-    if (/rectangle|square|shape|side|corner/.test(text)) return "🟦";
-    if (/clock|time|hour|minute/.test(text)) return "🕒";
-    if (/length|measure|ruler|centimeter|meter/.test(text)) return "📏";
-    if (/fraction|half|quarter|pizza|equal parts/.test(text)) return "🍕";
-    if (/data|graph|chart|picture graph/.test(text)) return "📊";
-    if (/add|subtract|sum|difference|altogether|remain|left|number|count|digit|hundred|ten|ones|compare|greater|smaller|pattern/.test(text)) {
-      return "🔢";
-    }
-    return null;
-  }
-
-  if (/plant|seed|soil|sunlight|leaf|root|grow|flower/.test(text)) return "🌱";
-  if (/weather|rain|cloud|wind|sunny|raincoat|storm|forecast/.test(text)) return "🌦️";
-  if (/hill|mountain|river|lake|pond|landform|valley|stream/.test(text)) return "🏞️";
-  if (/animal|puppy|dog|habitat|living/.test(text)) return "🐾";
-  if (/water|liquid|juice|solid|matter|ice/.test(text)) return "💧";
-  if (/light|sun|energy|heat|warm|electric|sound|vibration/.test(text)) return "⚡";
-  if (/color|texture|smooth|rough|size|shape|property|object/.test(text)) return "🔍";
-  return null;
-}
-
-function getLessonPicture(subject: Subject, lesson: Lesson): string {
-  const text = `${lesson.id} ${lesson.title} ${lesson.overview}`.toLowerCase();
-
-  if (subject.id === "reading") {
-    if (/sound|phonem|letter|word|read/.test(text)) return "🔤";
-    if (/story|book|text|character|read/.test(text)) return "📖";
-    return "📚";
-  }
-  if (subject.id === "math") {
-    if (/money|operation|addition|subtraction/.test(text)) return "🧮";
-    if (/fraction|multiplication/.test(text)) return "🍕";
-    if (/measure|geometry|shape|data/.test(text)) return "📐";
-    return "🔢";
-  }
-  if (/plant|life-science/.test(text)) return "🌱";
-  if (/weather|earth-sky/.test(text)) return "🌦️";
-  if (/matter|physical/.test(text)) return "🧪";
-  return "🔬";
-}
-
-function isStoryQuestion(prompt: string): boolean {
-  return /\bstory|character|setting|theme|event|beginning|ending|book|plot\b/i.test(prompt);
-}
-
 const difficultyLabels: Record<LessonDifficulty, string> = {
   easy: "Easy",
   standard: "Standard",
@@ -715,6 +633,8 @@ const difficultyLabels: Record<LessonDifficulty, string> = {
 };
 
 type Props = {
+  difficulty: LessonDifficulty;
+  onDifficultyChange: (difficulty: LessonDifficulty) => void;
   onBack: () => void;
   onMusicCategoryChange: (category: CategoryId | null) => void;
   completedLessonIds: string[];
@@ -723,6 +643,8 @@ type Props = {
 };
 
 export default function GradeTwoLessonsScreen({
+  difficulty,
+  onDifficultyChange,
   onBack,
   onMusicCategoryChange,
   completedLessonIds,
@@ -731,10 +653,6 @@ export default function GradeTwoLessonsScreen({
 }: Props) {
   const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
-  const [activeDifficulty, setActiveDifficulty] = useState<LessonDifficulty>("easy");
-  const [nextDifficultyByLesson, setNextDifficultyByLesson] = useState<
-    Record<string, LessonDifficulty>
-  >({});
   const [roundQuestions, setRoundQuestions] = useState<Challenge[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -742,14 +660,6 @@ export default function GradeTwoLessonsScreen({
   const [finished, setFinished] = useState(false);
 
   const currentChallenge = roundQuestions[questionIndex];
-  const currentPicture =
-    activeSubject && currentChallenge
-      ? getQuestionPicture(
-          activeSubject.id,
-          currentChallenge.prompt,
-          currentChallenge.answer
-        )
-      : null;
   const currentLessonId =
     activeSubject && activeLesson
       ? getLessonProgressId(activeSubject, activeLesson)
@@ -757,12 +667,6 @@ export default function GradeTwoLessonsScreen({
   const isLessonComplete = Boolean(
     currentLessonId && completedLessonIds.includes(currentLessonId)
   );
-  const nextDifficulty =
-    activeDifficulty === "easy"
-      ? "standard"
-      : activeDifficulty === "standard"
-        ? "challenge"
-        : null;
   const lessonIndex =
     activeSubject && activeLesson
       ? activeSubject.lessons.findIndex((lesson) => lesson.id === activeLesson.id)
@@ -800,19 +704,9 @@ export default function GradeTwoLessonsScreen({
     }
   };
 
-  const startLesson = (subject: Subject, lesson: Lesson) => {
-    const lessonId = getLessonProgressId(subject, lesson);
-    const nextDifficulty = nextDifficultyByLesson[lessonId] ?? "easy";
-    startLessonAtDifficulty(lesson, nextDifficulty);
-  };
-
-  const startLessonAtDifficulty = (
-    lesson: Lesson,
-    nextDifficulty: LessonDifficulty
-  ) => {
+  const startLesson = (lesson: Lesson) => {
     setActiveLesson(lesson);
-    setActiveDifficulty(nextDifficulty);
-    setRoundQuestions(getRoundQuestions(lesson, nextDifficulty));
+    setRoundQuestions(getRoundQuestions(lesson, difficulty));
     setQuestionIndex(0);
     setSelectedAnswer(null);
     setAnswerIsCorrect(null);
@@ -827,41 +721,13 @@ export default function GradeTwoLessonsScreen({
   const advanceChallenge = () => {
     if (!activeLesson || !answerIsCorrect) return;
     if (questionIndex === roundQuestions.length - 1) {
-      const difficultyIndex = difficultyOrder.indexOf(activeDifficulty);
-      const nextDifficulty = difficultyOrder[difficultyIndex + 1];
-      if (nextDifficulty && currentLessonId) {
-        setNextDifficultyByLesson((previous) => ({
-          ...previous,
-          [currentLessonId]: nextDifficulty,
-        }));
-      } else if (currentLessonId && !isLessonComplete) {
-        onCompleteLesson(currentLessonId);
-      }
+      if (currentLessonId && !isLessonComplete) onCompleteLesson(currentLessonId);
       setFinished(true);
       return;
     }
     setQuestionIndex((index) => index + 1);
     setSelectedAnswer(null);
     setAnswerIsCorrect(null);
-  };
-
-  const continueToNextQuarter = () => {
-    if (!activeSubject || !activeLesson || !currentLessonId) return;
-
-    if (!isLessonComplete) onCompleteLesson(currentLessonId);
-
-    const nextLesson = activeSubject.lessons[lessonIndex + 1];
-    if (nextLesson) {
-      const nextLessonId = getLessonProgressId(activeSubject, nextLesson);
-      startLessonAtDifficulty(
-        nextLesson,
-        nextDifficultyByLesson[nextLessonId] ?? "easy"
-      );
-      return;
-    }
-
-    setActiveLesson(null);
-    resetGame();
   };
 
   return (
@@ -897,61 +763,42 @@ export default function GradeTwoLessonsScreen({
             {finished ? (
               <View style={styles.finishCard}>
                 <Text style={styles.finishEmoji}>⭐</Text>
-                <Text style={styles.cardTitle}>
-                  {activeDifficulty === "challenge"
-                    ? "Quarter mastered!"
-                    : "Level complete!"}
-                </Text>
+                <Text style={styles.cardTitle}>Quarter complete!</Text>
                 <Text style={styles.finishHint}>
-                  {activeDifficulty === "challenge"
-                    ? "You completed all three difficulty levels."
-                    : `${difficultyLabels[activeDifficulty]} complete! Choose a harder level or continue.`}
+                  Difficulty: {difficultyLabels[difficulty]}
                 </Text>
-                <View style={styles.finishControls}>
+                <View style={styles.difficultyControls}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={
-                      nextDifficulty
-                        ? `Try ${difficultyLabels[nextDifficulty]} difficulty`
-                        : "Try Challenge difficulty again"
-                    }
+                    accessibilityLabel="Decrease question difficulty"
+                    accessibilityState={{ disabled: difficulty === "easy" }}
+                    disabled={difficulty === "easy"}
                     onPress={() =>
-                      startLessonAtDifficulty(
-                        activeLesson,
-                        nextDifficulty ?? "challenge"
-                      )
+                      onDifficultyChange(difficulty === "challenge" ? "standard" : "easy")
                     }
                     style={({ pressed }) => [
                       styles.difficultyButton,
-                      styles.finishActionButton,
-                      pressed && styles.pressed,
+                      difficulty === "easy" && styles.difficultyButtonDisabled,
+                      pressed && difficulty !== "easy" && styles.pressed,
                     ]}
                   >
-                    <Text style={styles.difficultyButtonText}>
-                      {nextDifficulty
-                        ? `TRY ${difficultyLabels[nextDifficulty].toUpperCase()}`
-                        : "TRY CHALLENGE AGAIN"}
-                    </Text>
+                    <Text style={styles.difficultyButtonText}>↓ Easier</Text>
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={
-                      lessonIndex < activeSubject.lessons.length - 1
-                        ? "Continue to the next quarter"
-                        : "Finish this subject and return to its quarters"
+                    accessibilityLabel="Increase question difficulty"
+                    accessibilityState={{ disabled: difficulty === "challenge" }}
+                    disabled={difficulty === "challenge"}
+                    onPress={() =>
+                      onDifficultyChange(difficulty === "easy" ? "standard" : "challenge")
                     }
-                    onPress={continueToNextQuarter}
                     style={({ pressed }) => [
-                      styles.continueButton,
-                      styles.finishActionButton,
-                      pressed && styles.pressed,
+                      styles.difficultyButton,
+                      difficulty === "challenge" && styles.difficultyButtonDisabled,
+                      pressed && difficulty !== "challenge" && styles.pressed,
                     ]}
                   >
-                    <Text style={styles.continueButtonText}>
-                      {lessonIndex < activeSubject.lessons.length - 1
-                        ? "NEXT QUARTER →"
-                        : "FINISH SUBJECT"}
-                    </Text>
+                    <Text style={styles.difficultyButtonText}>↑ Harder</Text>
                   </Pressable>
                 </View>
               </View>
@@ -988,7 +835,7 @@ export default function GradeTwoLessonsScreen({
                     </View>
                     <View style={styles.difficultyBadge}>
                       <Text style={styles.difficultyBadgeText}>
-                        {difficultyLabels[activeDifficulty]} difficulty
+                        {difficultyLabels[difficulty]} difficulty
                       </Text>
                     </View>
                     <View style={styles.questionTrack}>
@@ -999,26 +846,6 @@ export default function GradeTwoLessonsScreen({
                         ]}
                       />
                     </View>
-                    {currentPicture ? (
-                      isStoryQuestion(currentChallenge.prompt) ? (
-                        <View
-                          accessibilityLabel="Story picture"
-                          style={styles.storyBook}
-                        >
-                          <View style={styles.storyPicturePage}>
-                            <Text style={styles.storyPictureIcon}>{currentPicture}</Text>
-                            <Text style={styles.storyPageLabel}>STORY SCENE</Text>
-                          </View>
-                        </View>
-                      ) : (
-                        <View
-                          accessibilityLabel="Picture related to the question"
-                          style={styles.picturePanel}
-                        >
-                          <Text style={styles.pictureEmoji}>{currentPicture}</Text>
-                        </View>
-                      )
-                    ) : null}
                     <Text style={styles.prompt}>{currentChallenge.prompt}</Text>
                     <View style={styles.options}>
                       {currentChallenge.options.map((option) => {
@@ -1091,55 +918,41 @@ export default function GradeTwoLessonsScreen({
           <View style={styles.trail}>
             <View style={styles.trailHeading}>
               <Text style={styles.trailFlag}>🚩</Text>
-              <View style={styles.trailHeadingCopy}>
-                <Text style={styles.trailTitle}>Your learning trail</Text>
-                <Text style={styles.trailProgress}>
-                  {activeSubject.lessons.filter((lesson) =>
-                    completedLessonIds.includes(getLessonProgressId(activeSubject, lesson))
-                  ).length}{" "}
-                  of {activeSubject.lessons.length} quarters complete
-                </Text>
-              </View>
+              <Text style={styles.trailTitle}>Your {activeSubject.title} trail</Text>
             </View>
-            <View style={styles.trailList}>
-              <View pointerEvents="none" style={styles.trailLine} />
-              {activeSubject.lessons.map((lesson, index) => {
-                const lessonId = getLessonProgressId(activeSubject, lesson);
-                const complete = completedLessonIds.includes(lessonId);
-                const locked =
-                  !lessonProgressReady ||
-                  activeSubject.lessons
-                    .slice(0, index)
-                    .some(
-                      (previous) =>
-                        !completedLessonIds.includes(getLessonProgressId(activeSubject, previous))
-                    );
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${locked ? "Preview locked" : "Open"} quarter ${index + 1}: ${lesson.title}`}
-                    key={lesson.id}
-                    onPress={() => startLesson(activeSubject, lesson)}
-                    style={({ pressed }) => [styles.lessonCard, pressed && styles.pressed]}
-                  >
-                    <View style={[styles.stepNumber, complete && styles.completeStep]}>
-                      <Text style={styles.stepNumberText}>{complete ? "✓" : index + 1}</Text>
-                    </View>
-                    <View style={styles.lessonIconBox}>
-                      <Text style={styles.lessonIcon}>{getLessonPicture(activeSubject, lesson)}</Text>
-                    </View>
-                    <View style={styles.lessonCopy}>
-                      <Text style={styles.stepStatus}>
-                        {complete ? "COMPLETED · REPLAY" : !lessonProgressReady ? "LOADING" : locked ? "LOCKED · PREVIEW" : "READY"}
-                      </Text>
-                      <Text style={styles.lessonTitle}>{lesson.title}</Text>
-                      <Text style={styles.lessonOverview}>{lesson.overview}</Text>
-                    </View>
-                    <Text style={styles.lessonArrow}>{locked ? "🔒" : "›"}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {activeSubject.lessons.map((lesson, index) => {
+              const lessonId = getLessonProgressId(activeSubject, lesson);
+              const complete = completedLessonIds.includes(lessonId);
+              const locked =
+                !lessonProgressReady ||
+                activeSubject.lessons
+                  .slice(0, index)
+                  .some(
+                    (previous) =>
+                      !completedLessonIds.includes(getLessonProgressId(activeSubject, previous))
+                  );
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${locked ? "Preview locked" : "Open"} lesson ${index + 1}: ${lesson.title}`}
+                  key={lesson.id}
+                  onPress={() => startLesson(lesson)}
+                  style={({ pressed }) => [styles.lessonCard, pressed && styles.pressed]}
+                >
+                  <View style={[styles.stepNumber, complete && styles.completeStep]}>
+                    <Text style={styles.stepNumberText}>{complete ? "✓" : index + 1}</Text>
+                  </View>
+                  <View style={styles.lessonCopy}>
+                    <Text style={styles.stepStatus}>
+                      {complete ? "COMPLETED · REPLAY" : !lessonProgressReady ? "LOADING" : locked ? "LOCKED · PREVIEW" : "READY · PLAY GAME"}
+                    </Text>
+                    <Text style={styles.lessonTitle}>{lesson.title}</Text>
+                    <Text style={styles.lessonOverview}>{lesson.overview}</Text>
+                  </View>
+                  <Text style={styles.lessonArrow}>{locked ? "🔒" : "›"}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         ) : (
           <View style={styles.subjects}>
@@ -1186,20 +999,14 @@ const styles = StyleSheet.create({
   subjectFooter: { alignItems: "center", flexDirection: "row", gap: 10, marginTop: 8 },
   subjectCount: { color: "#6E8190", fontSize: 14, fontWeight: "700" },
   subjectArrow: { color: "#258EA3", fontSize: 20, fontWeight: "900" },
-  trail: { gap: 12 },
-  trailHeading: { alignItems: "center", flexDirection: "row", gap: 10, marginBottom: 2, paddingLeft: 6 },
-  trailHeadingCopy: { flex: 1 },
+  trail: { gap: 10 },
+  trailHeading: { alignItems: "center", flexDirection: "row", gap: 10, marginBottom: 4, paddingLeft: 6 },
   trailFlag: { fontSize: 26 },
   trailTitle: { color: "#315C4A", fontSize: 17, fontWeight: "900" },
-  trailProgress: { color: "#6E8190", fontSize: 12, fontWeight: "700", marginTop: 2 },
-  trailList: { gap: 10, paddingLeft: 2, position: "relative" },
-  trailLine: { backgroundColor: "#A9DDE2", bottom: 20, left: 18, position: "absolute", top: 20, width: 3 },
-  lessonCard: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 18, borderWidth: 1.5, flexDirection: "row", gap: 10, minHeight: 78, padding: 12 },
+  lessonCard: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 18, borderWidth: 1.5, flexDirection: "row", gap: 12, padding: 14 },
   stepNumber: { alignItems: "center", backgroundColor: "#B8EDF3", borderColor: "#78C7D2", borderRadius: 19, borderWidth: 2, height: 38, justifyContent: "center", width: 38 },
   completeStep: { backgroundColor: "#BDE7C2", borderColor: "#72B77D" },
   stepNumberText: { color: "#173B53", fontSize: 15, fontWeight: "900" },
-  lessonIconBox: { alignItems: "center", backgroundColor: "#E8F8F6", borderRadius: 12, height: 44, justifyContent: "center", width: 44 },
-  lessonIcon: { fontSize: 26 },
   lessonCopy: { flex: 1 },
   stepStatus: { color: "#258EA3", fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
   lessonTitle: { color: "#173B53", fontSize: 15, fontWeight: "900", lineHeight: 20, marginTop: 4 },
@@ -1220,18 +1027,12 @@ const styles = StyleSheet.create({
   difficultyBadgeText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   questionTrack: { backgroundColor: "#FFFFFF", borderRadius: 5, height: 9, marginTop: 12, overflow: "hidden" },
   questionProgress: { backgroundColor: "#F17D65", height: "100%" },
-  picturePanel: { alignItems: "center", alignSelf: "center", backgroundColor: "#DDF5F2", borderColor: "#CDEEF1", borderRadius: 16, borderWidth: 1.5, justifyContent: "center", marginTop: 14, minHeight: 82, minWidth: 104, padding: 10 },
-  pictureEmoji: { fontSize: 48 },
-  storyBook: { alignSelf: "center", backgroundColor: "#FFF4D5", borderColor: "#EBCB79", borderRadius: 16, borderWidth: 1.5, marginTop: 14, padding: 8 },
-  storyPicturePage: { alignItems: "center", backgroundColor: "#FFFFFF", borderRadius: 10, justifyContent: "center", minHeight: 82, minWidth: 104, padding: 8 },
-  storyPictureIcon: { fontSize: 42 },
-  storyPageLabel: { color: "#9A7130", fontSize: 9, fontWeight: "900", letterSpacing: 0.5, marginTop: 5, textAlign: "center" },
   prompt: { color: "#173B53", fontSize: 18, fontWeight: "800", lineHeight: 26, marginTop: 18 },
   options: { gap: 8, marginTop: 14 },
-  option: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 12, borderWidth: 1.5, flexDirection: "row", gap: 12, minHeight: 58, padding: 12 },
+  option: { backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 12, borderWidth: 1.5, padding: 13 },
   selectedOption: { backgroundColor: "#D8F1F2", borderColor: "#258EA3" },
   correctOption: { backgroundColor: "#E0F3DF", borderColor: "#4E8B5C" },
-  optionText: { color: "#36566A", flex: 1, fontSize: 15, fontWeight: "700", lineHeight: 21 },
+  optionText: { color: "#36566A", fontSize: 15, fontWeight: "700", lineHeight: 21 },
   selectedOptionText: { color: "#173B53" },
   correctFeedback: { color: "#397147", fontSize: 14, fontWeight: "800", lineHeight: 21, marginTop: 14 },
   tryAgainFeedback: { color: "#8A4F20", fontSize: 14, fontWeight: "800", lineHeight: 21, marginTop: 14 },
@@ -1243,12 +1044,9 @@ const styles = StyleSheet.create({
   finishCard: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#F4C451", borderRadius: 18, borderWidth: 1.5, padding: 22 },
   finishEmoji: { fontSize: 54, marginBottom: 10 },
   finishHint: { color: "#536D79", fontSize: 14, fontWeight: "700", marginTop: 8, textAlign: "center" },
-  finishControls: { flexDirection: "row", gap: 8, marginTop: 14, width: "100%" },
-  finishActionButton: { flex: 1, minHeight: 54, paddingHorizontal: 8 },
-  difficultyButton: { alignItems: "center", backgroundColor: "#258EA3", borderRadius: 13, justifyContent: "center", minHeight: 50, paddingHorizontal: 10 },
+  difficultyControls: { flexDirection: "row", gap: 12, marginTop: 12, width: "100%" },
+  difficultyButton: { alignItems: "center", backgroundColor: "#258EA3", borderRadius: 13, flex: 1, justifyContent: "center", minHeight: 50, paddingHorizontal: 10 },
   difficultyButtonDisabled: { backgroundColor: "#A8B8BC" },
-  difficultyButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900", textAlign: "center" },
-  continueButton: { alignItems: "center", backgroundColor: "#315C4A", borderRadius: 13, justifyContent: "center", minHeight: 50, paddingHorizontal: 10 },
-  continueButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900", textAlign: "center" },
+  difficultyButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   pressed: { opacity: 0.72 },
 });
