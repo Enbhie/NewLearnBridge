@@ -1,9 +1,12 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useContext, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { AnimatedPressable as TouchableOpacity } from '../components/AnimatedPressable';
+import { AppAppearanceContext } from '../components/CloudBackdrop';
 
 export default function LoginScreen() {
+  const { darkMode } = useContext(AppAppearanceContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const router = useRouter();
@@ -15,11 +18,11 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-white"
+      className="flex-1"
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <View className="flex-1 justify-center px-6 py-12">
-          <StatusBar style="dark" />
+        <View className="flex-1 justify-center px-6 py-12" style={darkMode && styles.darkContent}>
+          <StatusBar style={darkMode ? "light" : "dark"} />
           
           {/* Header Section */}
           <View className="mb-8">
@@ -80,3 +83,14 @@ export default function LoginScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+const styles = {
+  darkContent: {
+    alignSelf: "center" as const,
+    width: "100%" as const,
+    maxWidth: 560,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 24,
+    marginVertical: 20,
+  },
+};

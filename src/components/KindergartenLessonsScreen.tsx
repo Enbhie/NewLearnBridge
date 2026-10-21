@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { CategoryId } from "../data/learningContent";
@@ -11,6 +11,8 @@ import {
   WhoCanHelpGame,
 } from "./KindergartenGames";
 import SoundSafariGame from "./SoundSafariGame";
+import { playFeedback } from "../utils/soundEffects";
+import { AppAppearanceContext } from "./CloudBackdrop";
 
 // ---------- Curriculum data ----------
 
@@ -160,6 +162,7 @@ export default function KindergartenLessonsScreen({
   lessonProgressReady,
   onCompleteLesson,
 }: Props) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const [view, setView] = useState<View_>({ kind: "units" });
 
   const activeUnit =
@@ -212,7 +215,7 @@ export default function KindergartenLessonsScreen({
       if (game.id === "house-builder") return <HouseBuilderGame {...common} />;
       if (game.id === "healthy-routine") return <HealthyRoutineGame {...common} />;
       return (
-        <SafeAreaView style={styles.page}>
+        <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
           <View style={styles.centerPanel}>
             <Text style={styles.bigEmoji}>{game.emoji}</Text>
             <Text style={styles.heroTitle}>{game.title}</Text>
@@ -229,27 +232,27 @@ export default function KindergartenLessonsScreen({
   // ----- Unit view -----
   if (view.kind === "unit" && activeUnit) {
     return (
-      <SafeAreaView style={styles.page}>
+      <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Pressable onPress={() => setView({ kind: "units" })} style={styles.backBtn}>
             <Text style={styles.backBtnText}>Back</Text>
           </Pressable>
-          <View style={styles.hero}>
+          <View style={[styles.hero, darkMode && styles.darkCard]}>
             <Text style={styles.bigEmoji}>{activeUnit.emoji}</Text>
-            <Text style={styles.heroTitle}>
+            <Text style={[styles.heroTitle, darkMode && styles.darkText]}>
               Unit {activeUnit.number}: {activeUnit.title}
             </Text>
-            <Text style={styles.heroSub}>{activeUnit.focus}</Text>
-            <Text style={styles.starsText}>
+            <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>{activeUnit.focus}</Text>
+            <Text style={[styles.starsText, darkMode && styles.darkText]}>
               ⭐ {unitStars(activeUnit)} / {activeUnit.games.length * LEVELS.length}
             </Text>
           </View>
 
           {activeUnit.games.map((game) => (
-            <View key={game.id} style={styles.card}>
+            <View key={game.id} style={[styles.card, darkMode && styles.darkCard]}>
               <Text style={styles.cardEmoji}>{game.emoji}</Text>
-              <Text style={styles.cardTitle}>{game.title}</Text>
-              <Text style={styles.cardBlurb}>{game.blurb}</Text>
+              <Text style={[styles.cardTitle, darkMode && styles.darkText]}>{game.title}</Text>
+              <Text style={[styles.cardBlurb, darkMode && styles.darkMutedText]}>{game.blurb}</Text>
               {!game.playable ? <Text style={styles.soon}>COMING SOON</Text> : null}
               <View style={styles.levelRow}>
                 {LEVELS.map((level) => {
@@ -271,7 +274,7 @@ export default function KindergartenLessonsScreen({
                       ]}
                     >
                       <Text style={styles.levelStar}>{done ? "⭐" : unlocked ? "▶" : "🔒"}</Text>
-                      <Text style={styles.levelText}>{LEVEL_LABELS[level - 1]}</Text>
+                      <Text style={[styles.levelText, darkMode && styles.darkText]}>{LEVEL_LABELS[level - 1]}</Text>
                     </Pressable>
                   );
                 })}
@@ -279,8 +282,8 @@ export default function KindergartenLessonsScreen({
             </View>
           ))}
 
-          <View style={styles.badgeCard}>
-            <Text style={styles.cardTitle}>
+          <View style={[styles.badgeCard, darkMode && styles.darkCard]}>
+            <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
               {unitStars(activeUnit) === activeUnit.games.length * LEVELS.length
                 ? "🏅 Unit badge earned!"
                 : "🏅 Finish every level to earn the unit badge"}
@@ -293,27 +296,27 @@ export default function KindergartenLessonsScreen({
 
   // ----- Unit picker -----
   return (
-    <SafeAreaView style={styles.page}>
+    <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Pressable onPress={onBack} style={styles.backBtn}>
           <Text style={styles.backBtnText}>Back</Text>
         </Pressable>
-        <View style={styles.hero}>
+        <View style={[styles.hero, darkMode && styles.darkCard]}>
           <Text style={styles.bigEmoji}>🌈</Text>
-          <Text style={styles.heroTitle}>Choose an adventure</Text>
-          <Text style={styles.heroSub}>Pick a unit to start playing!</Text>
+          <Text style={[styles.heroTitle, darkMode && styles.darkText]}>Choose an adventure</Text>
+          <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>Pick a unit to start playing!</Text>
         </View>
         {kindergartenUnits.map((unit) => (
           <Pressable
             key={unit.id}
             onPress={() => setView({ kind: "unit", unitId: unit.id })}
-            style={styles.card}
+            style={[styles.card, darkMode && styles.darkCard]}
           >
             <Text style={styles.cardEmoji}>{unit.emoji}</Text>
-            <Text style={styles.cardTitle}>
+            <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
               Unit {unit.number}: {unit.title}
             </Text>
-            <Text style={styles.meta}>
+            <Text style={[styles.meta, darkMode && styles.darkMutedText]}>
               {unit.games.length} {unit.games.length === 1 ? "game" : "games"} · ⭐{" "}
               {unitStars(unit)}/{unit.games.length * LEVELS.length} →
             </Text>
@@ -344,6 +347,7 @@ function MarketCountGame({
   onExit: () => void;
   onPassed: () => void;
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const max = MAX_BY_LEVEL[level - 1] ?? 5;
   const targets = useMemo(
     () => Array.from({ length: ROUNDS }, () => 1 + Math.floor(Math.random() * max)),
@@ -361,6 +365,7 @@ function MarketCountGame({
   const check = () => {
     const correct = count === target;
     setChecked(correct);
+    playFeedback(correct ? "success" : "error");
     if (correct) setScore((s) => s + 1);
   };
 
@@ -379,11 +384,11 @@ function MarketCountGame({
   if (finished) {
     const passed = score >= PASS_SCORE;
     return (
-      <SafeAreaView style={styles.page}>
+      <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
         <View style={styles.centerPanel}>
           <Text style={styles.bigEmoji}>{passed ? "🌟" : "💪"}</Text>
-          <Text style={styles.heroTitle}>{passed ? "Great job!" : "Try again!"}</Text>
-          <Text style={styles.heroSub}>
+          <Text style={[styles.heroTitle, darkMode && styles.darkText]}>{passed ? "Great job!" : "Try again!"}</Text>
+          <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>
             You got {score} of {ROUNDS} right.
             {passed ? " You earned a star!" : " Get 2 right to earn a star."}
           </Text>
@@ -396,24 +401,24 @@ function MarketCountGame({
   }
 
   return (
-    <SafeAreaView style={styles.page}>
+    <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Pressable onPress={onExit} style={styles.backBtn}>
           <Text style={styles.backBtnText}>Back</Text>
         </Pressable>
-        <View style={styles.hero}>
-          <Text style={styles.meta}>
+        <View style={[styles.hero, darkMode && styles.darkCard]}>
+          <Text style={[styles.meta, darkMode && styles.darkMutedText]}>
             Round {round + 1} of {ROUNDS} · {LEVEL_LABELS[level - 1]}
           </Text>
-          <Text style={styles.heroTitle}>Market Count</Text>
-          <Text style={styles.heroSub}>
+          <Text style={[styles.heroTitle, darkMode && styles.darkText]}>Market Count</Text>
+          <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>
             Put {target} {item.name} in the basket!
           </Text>
-          <Text style={styles.targetNumber}>{target}</Text>
+          <Text style={[styles.targetNumber, darkMode && styles.darkText]}>{target}</Text>
         </View>
 
-        <View style={styles.basket}>
-          <Text style={styles.basketLabel}>🧺 Basket: {count}</Text>
+        <View style={[styles.basket, darkMode && styles.darkCard]}>
+          <Text style={[styles.basketLabel, darkMode && styles.darkText]}>🧺 Basket: {count}</Text>
           <View style={styles.basketItems}>
             {Array.from({ length: count }, (_, i) => (
               <Text key={i} style={styles.basketEmoji}>
@@ -465,7 +470,7 @@ function MarketCountGame({
 // ---------- Styles (same palette as index.tsx) ----------
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#F2FBFD" },
+  page: { flex: 1, backgroundColor: "transparent" },
   scroll: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 40 },
   centerPanel: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   backBtn: {
@@ -535,6 +540,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   basketLabel: { color: "#173B53", fontSize: 16, fontWeight: "900", marginBottom: 8 },
+  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
   basketItems: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
   basketEmoji: { fontSize: 32 },
   counterRow: {

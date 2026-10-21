@@ -16,7 +16,7 @@ import {
     updateProfile,
     type User,
 } from "firebase/auth";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import GradeOneLessonsScreen, { gradeOneLessonCount } from "../components/GradeOneLessonsScreen";
 import {
     ActivityIndicator,
@@ -38,6 +38,10 @@ import AccountSettingsScreen, {
     type AccountPreferences,
     type LearnerProfile,
 } from "../components/AccountSettingsScreen";
+import {
+    AppAppearanceContext,
+    CloudBackdropVisibilityContext,
+} from "../components/CloudBackdrop";
 import { AnimatedPressable as Pressable } from "../components/AnimatedPressable";
 import CharacterSelectScreen from "../components/CharacterSelectScreen";
 import LessonCompleteScreen from "../components/LessonCompleteScreen";
@@ -150,6 +154,7 @@ function getBackgroundMusicTrack(
       "grade1-lessons",
       "grade2-lessons",
       "character-select",
+      "settings",
     ].includes(screen)
   ) {
     return "lesson-board";
@@ -211,6 +216,7 @@ const DEFAULT_PREFERENCES: AccountPreferences = {
   notificationsEnabled: false,
   offlineMode: false,
   privacyMode: false,
+  darkMode: false,
   screenTimeLimitMinutes: 0,
 };
 
@@ -307,6 +313,7 @@ function ActionButton({
   onPress: () => void;
   variant?: "primary" | "secondary";
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
   return (
     <Pressable
       accessibilityRole="button"
@@ -314,6 +321,7 @@ function ActionButton({
       style={({ pressed }) => [
         styles.actionButton,
         variant === "secondary" && styles.secondaryButton,
+        darkMode && (variant === "secondary" ? styles.actionButtonSecondaryDark : styles.actionButtonPrimaryDark),
         pressed && styles.pressed,
       ]}
     >
@@ -347,11 +355,13 @@ function FriendlyMascotBanner({ message }: { message: string }) {
 function NavButton({
   label,
   active,
+  darkMode,
   onPress,
   accessibilityLabel,
 }: {
   label: string;
   active: boolean;
+  darkMode: boolean;
   onPress: () => void;
   accessibilityLabel?: string;
 }) {
@@ -362,11 +372,18 @@ function NavButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.navButton,
-        active && styles.navButtonActive,
+        darkMode && styles.navButtonDark,
+        active && (darkMode ? styles.navButtonActiveDark : styles.navButtonActive),
         pressed && styles.pressed,
       ]}
     >
-      <Text style={[styles.navButtonText, active && styles.navButtonTextActive]}>
+      <Text
+        style={[
+          styles.navButtonText,
+          darkMode && styles.navButtonTextDark,
+          active && (darkMode ? styles.navButtonTextActiveDark : styles.navButtonTextActive),
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -381,16 +398,21 @@ function BottomNavigation({
   setScreen: (screen: Screen) => void;
 }) {
   const router = useRouter();
+  const { darkMode } = useContext(AppAppearanceContext);
 
   return (
-    <View style={styles.bottomNavigation}>
-      <NavButton label="▣" active={screen === "missions"} onPress={() => setScreen("missions")} />
-      <NavButton label="♧" active={screen === "menu"} onPress={() => setScreen("menu")} />
+    <View style={[styles.bottomNavigation, darkMode && styles.bottomNavigationDark]}>
+      <NavButton label="▣" active={screen === "missions"} darkMode={darkMode} onPress={() => setScreen("missions")} />
+      <NavButton label="♧" active={screen === "menu"} darkMode={darkMode} onPress={() => setScreen("menu")} />
       <Pressable
         accessibilityLabel="Open camera shape scanner"
         accessibilityRole="button"
         onPress={() => router.push("/shape-recognition")}
-        style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
+        style={({ pressed }) => [
+          styles.addButton,
+          darkMode && styles.addButtonDark,
+          pressed && styles.pressed,
+        ]}
       >
         <Text style={styles.addButtonText}>＋</Text>
       </Pressable>
@@ -398,12 +420,14 @@ function BottomNavigation({
         label="⚙"
         accessibilityLabel="LearnBridge tutorial"
         active={screen === "tutorial"}
+        darkMode={darkMode}
         onPress={() => setScreen("tutorial")}
       />
       <NavButton
         label="♙"
         accessibilityLabel="Profile"
         active={screen === "profile"}
+        darkMode={darkMode}
         onPress={() => setScreen("profile")}
       />
     </View>
@@ -416,13 +440,20 @@ function BottomNavigation({
 function HomeScreen({
   onPlay,
   setScreen,
+  darkMode,
 }: {
   onPlay: () => void;
   setScreen: (s: Screen) => void;
+  darkMode: boolean;
 }) {
   return (
     <SafeAreaView style={styles.homePage}>
-      <View style={styles.homeCard}>
+      <View
+        style={[
+          styles.homeCard,
+          darkMode ? styles.homeCardNight : styles.homeCardDay,
+        ]}
+      >
         <Image
           source={require("../../assets/images/main-logo.png")}
           style={styles.homeLogo}
@@ -430,8 +461,10 @@ function HomeScreen({
           accessibilityLabel="LearnBridge owl logo"
         />
 
-        <Text style={styles.homeTitle}>LearnBridge</Text>
-        <Text style={styles.homeSubtitle}>Little learners. Big discoveries.</Text>
+        <Text style={[styles.homeTitle, darkMode && styles.homeTitleNight]}>LearnBridge</Text>
+        <Text style={[styles.homeSubtitle, darkMode && styles.homeSubtitleNight]}>
+          Little learners. Big discoveries.
+        </Text>
 
         <View style={styles.homeActions}>
           <ActionButton onPress={onPlay}>LET'S PLAY!</ActionButton>
@@ -1122,18 +1155,19 @@ function ProfileScreen({
   screen: Screen;
   setScreen: (s: Screen) => void;
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
   return (
     <SafeAreaView style={styles.appPage}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Profile</Text>
+        <Text style={[styles.pageTitle, darkMode && styles.darkText]}>Profile</Text>
 
-        <View style={styles.profileBanner}>
+        <View style={[styles.profileBanner, darkMode && styles.darkPanel]}>
           <Text style={styles.avatar}>{selectedIcon}</Text>
           <View>
-            <Text style={styles.profileName}>
+            <Text style={[styles.profileName, darkMode && styles.darkText]}>
               {privacyMode ? "Learner" : childName || "User_Name"}
             </Text>
-            <Text style={styles.profileHint}>
+            <Text style={[styles.profileHint, darkMode && styles.darkMutedText]}>
               {privacyMode
                 ? "Personal details hidden"
                 : `Age: ${getAgeFromBirthdate(childBirthdate) ?? "Not set"} | Keep learning!`}
@@ -1141,19 +1175,20 @@ function ProfileScreen({
           </View>
         </View>
 
-        <View style={styles.profileStatusCard}>
-          <Text style={styles.profileStatusTitle}>Profile status</Text>
+        <View style={[styles.profileStatusCard, darkMode && styles.darkPanel]}>
+          <Text style={[styles.profileStatusTitle, darkMode && styles.darkText]}>Profile status</Text>
           <View style={styles.profileStatusRow}>
-            <Text style={styles.profileStatusLabel}>Account</Text>
-            <Text style={styles.profileStatusValue}>
+            <Text style={[styles.profileStatusLabel, darkMode && styles.darkText]}>Account</Text>
+            <Text style={[styles.profileStatusValue, darkMode && styles.darkMutedText]}>
               {firebaseUser ? "Signed in" : "Guest"}
             </Text>
           </View>
           <View style={styles.profileStatusRow}>
-            <Text style={styles.profileStatusLabel}>Email</Text>
+            <Text style={[styles.profileStatusLabel, darkMode && styles.darkText]}>Email</Text>
             <Text
               style={[
                 styles.profileStatusValue,
+                darkMode && styles.darkMutedText,
                 !firebaseUser?.emailVerified && styles.profileStatusPending,
               ]}
             >
@@ -1161,8 +1196,8 @@ function ProfileScreen({
             </Text>
           </View>
           <View style={styles.profileStatusRow}>
-            <Text style={styles.profileStatusLabel}>Learner profile</Text>
-            <Text style={styles.profileStatusValue}>
+            <Text style={[styles.profileStatusLabel, darkMode && styles.darkText]}>Learner profile</Text>
+            <Text style={[styles.profileStatusValue, darkMode && styles.darkMutedText]}>
               {childName.trim() && childBirthdate ? "Complete" : "Incomplete"}
             </Text>
           </View>
@@ -1204,6 +1239,7 @@ function MenuScreen({
   screen: Screen;
   setScreen: (s: Screen) => void;
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const gradeLessons = grade === "1"
@@ -1238,39 +1274,39 @@ function MenuScreen({
   return (
     <SafeAreaView style={styles.appPage}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.menuHero}>
-          <View style={styles.menuMascotStage}>
+        <View style={[styles.menuHero, darkMode && styles.darkPanel]}>
+          <View style={[styles.menuMascotStage, darkMode && styles.darkAccent]}>
             <Text style={styles.menuSparkle}>✨</Text>
             <Text style={styles.menuMascot}>{selectedIcon || "🦉"}</Text>
             <Text style={styles.menuBook}>📘</Text>
           </View>
           <View style={styles.menuGreetingCopy}>
-            <Text style={styles.menuGreeting}>
+            <Text style={[styles.menuGreeting, darkMode && styles.darkText]}>
               {privacyMode ? "Hello, learner!" : `Hi, ${childName || "friend"}!`}
             </Text>
-            <Text style={styles.menuGreetingSub}>Ready for a little adventure?</Text>
+            <Text style={[styles.menuGreetingSub, darkMode && styles.darkMutedText]}>Ready for a little adventure?</Text>
           </View>
         </View>
 
-        <View style={styles.progressCard}>
-          <Text style={styles.cardTitle}>PROGRESS BAR</Text>
-          <View style={styles.progressTrack}>
+        <View style={[styles.progressCard, darkMode && styles.darkPanel]}>
+          <Text style={[styles.cardTitle, darkMode && styles.darkText]}>PROGRESS BAR</Text>
+          <View style={[styles.progressTrack, darkMode && styles.darkTrack]}>
             <View style={[styles.progressValue, { width: `${lessonProgress}%` }]} />
           </View>
-          <View style={styles.streakBadge}>
-            <Text style={styles.streakBadgeText}>🔥 1 DAY STREAK</Text>
+          <View style={[styles.streakBadge, darkMode && styles.darkAccent]}>
+            <Text style={[styles.streakBadgeText, darkMode && styles.darkText]}>🔥 1 DAY STREAK</Text>
           </View>
         </View>
 
         {!offlineMode && (
-          <View style={styles.lessonsCard}>
+          <View style={[styles.lessonsCard, darkMode && styles.darkPanel]}>
             <View style={styles.lessonBoardHeader}>
-              <View style={styles.lessonBoardIcon}>
+              <View style={[styles.lessonBoardIcon, darkMode && styles.darkAccent]}>
                 <Text style={styles.lessonBoardIconText}>📚</Text>
               </View>
               <View style={styles.lessonBoardCopy}>
-                <Text style={styles.lessonBoardTitle}>Lesson Board</Text>
-                <Text style={styles.cardBody}>
+                <Text style={[styles.lessonBoardTitle, darkMode && styles.darkText]}>Lesson Board</Text>
+                <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>
                   {grade ? gradeLabels[grade] : "Choose a subject"} · {grade === "1" ? "Reading, Language, Math, Community, and Good Manners" : "Math, Reading Comprehension, and Science"}
                 </Text>
               </View>
@@ -1290,6 +1326,7 @@ function MenuScreen({
                   <View
                     style={[
                       styles.gradeLessonCard,
+                      darkMode && styles.darkCard,
                       isLocked && styles.lockedGradeLessonCard,
                       isLandscape && styles.gradeLessonCardLandscape,
                     ]}
@@ -1301,12 +1338,12 @@ function MenuScreen({
                     <Text style={styles.lessonPreviewHeading}>
                       {categoryMeta[categoryId].emoji} {categoryMeta[categoryId].label}
                     </Text>
-                    <Text style={styles.lessonPreviewTitle}>{content.title}</Text>
-                    <Text style={styles.cardBody}>{categoryMeta[categoryId].summary}</Text>
-                    <View style={styles.lessonContentPreview}>
-                      <Text style={styles.lessonPreviewHeading}>{content.grade === "K" ? "Kindergarten" : `Grade ${content.grade}`} · {content.theme}</Text>
-                      <Text style={styles.cardBody}>{content.storyLine}</Text>
-                      <Text style={styles.lessonPreviewHint}>Learn: {content.rememberText}</Text>
+                    <Text style={[styles.lessonPreviewTitle, darkMode && styles.darkText]}>{content.title}</Text>
+                    <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>{categoryMeta[categoryId].summary}</Text>
+                    <View style={[styles.lessonContentPreview, darkMode && styles.darkCard]}>
+                      <Text style={[styles.lessonPreviewHeading, darkMode && styles.darkMutedText]}>{content.grade === "K" ? "Kindergarten" : `Grade ${content.grade}`} · {content.theme}</Text>
+                      <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>{content.storyLine}</Text>
+                      <Text style={[styles.lessonPreviewHint, darkMode && styles.darkMutedText]}>Learn: {content.rememberText}</Text>
                     </View>
                     {isLocked ? (
                       <View style={styles.lockedLesson}>
@@ -1344,7 +1381,7 @@ function MenuScreen({
                 OPEN GRADE 2 ONLINE LESSONS
               </ActionButton>
             ) : (
-              <Text style={styles.cardBody}>
+              <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>
                 No online lessons for {grade ? gradeLabels[grade] : "this grade"} yet. Try an offline mission.
               </Text>
             )}
@@ -1352,12 +1389,21 @@ function MenuScreen({
         )}
 
         {offlineMode ? (
-          <View style={styles.offlineModePanel}>
-            <Text style={styles.cardHeading}>Offline-only mode</Text>
-            <Text style={styles.cardBody}>
-              Online lessons are hidden. Your local math missions are ready to play.
-            </Text>
-                {grade === "K" ? (
+          <View style={[styles.offlineModePanel, darkMode && styles.darkPanel]}>
+            <View style={styles.missionCardHeading}>
+              <View style={[styles.offlineMissionIcon, darkMode && styles.darkAccent]}>
+                <Text style={styles.offlineMissionEmoji}>🧭</Text>
+              </View>
+              <View style={styles.offlineCopy}>
+                <Text style={[styles.cardHeading, darkMode && styles.darkText]}>
+                  Your Offline Adventure
+                </Text>
+                <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>
+                  Online lessons are tucked away. Your local missions are ready whenever you are.
+                </Text>
+              </View>
+            </View>
+            {grade === "K" ? (
               <ActionButton onPress={() => setScreen("kinder-lessons")} variant="secondary">
                 OPEN KINDER CURRICULUM
               </ActionButton>
@@ -1372,13 +1418,29 @@ function MenuScreen({
           </View>
         ) : (
           <>
-            <View style={styles.offlineCard}>
-              <View style={styles.offlineCopy}>
-                <Text style={styles.cardHeading}>Offline Missions</Text>
-                <Text style={styles.cardBody}>Practice math through real-life Filipino experiences.</Text>
+            <View style={[styles.offlineCard, darkMode && styles.darkPanel]}>
+              <View style={styles.missionCardHeading}>
+                <View style={[styles.offlineMissionIcon, darkMode && styles.darkAccent]}>
+                  <Text style={styles.offlineMissionEmoji}>🧭</Text>
+                </View>
+                <View style={styles.offlineCopy}>
+                  <Text style={[styles.cardHeading, darkMode && styles.darkText]}>
+                    Offline Missions
+                  </Text>
+                  <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>
+                    Practice through real-life Filipino adventures, even without a connection.
+                  </Text>
+                </View>
               </View>
-              <Pressable onPress={() => setScreen("missions")} accessibilityRole="button">
-                <Text style={styles.openButton}>Open missions →</Text>
+              <Pressable
+                onPress={() => setScreen("missions")}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.openMissionsButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.openButton}>Explore missions →</Text>
               </Pressable>
             </View>
           </>
@@ -2030,6 +2092,8 @@ function GradeSetupTutorialScreen({
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
+  const setCloudBackdropVisible = useContext(CloudBackdropVisibilityContext);
+  const { setDarkMode } = useContext(AppAppearanceContext);
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("math");
   const [curriculumCategory, setCurriculumCategory] = useState<CategoryId | null>(null);
   const backgroundMusicTrack = getBackgroundMusicTrack(
@@ -2037,6 +2101,11 @@ export default function App() {
     selectedCategory,
     curriculumCategory
   );
+
+  useEffect(() => {
+    setCloudBackdropVisible(screen !== "settings");
+    return () => setCloudBackdropVisible(true);
+  }, [screen, setCloudBackdropVisible]);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -2052,6 +2121,10 @@ export default function App() {
   const [selectedIcon, setSelectedIcon] = useState("🦉");
   const [preferences, setPreferences] = useState<AccountPreferences>(DEFAULT_PREFERENCES);
   const [preferencesReady, setPreferencesReady] = useState(false);
+
+  useEffect(() => {
+    setDarkMode(preferences.darkMode);
+  }, [preferences.darkMode, setDarkMode]);
 
   const [quizResults, setQuizResults] = useState<{
     correct: number;
@@ -2738,6 +2811,7 @@ export default function App() {
   if (screen === "home") {
     return (
       <HomeScreen
+        darkMode={preferences.darkMode}
         onPlay={() => {
           if (!firebaseUser) {
             setScreen("signup");
@@ -3044,22 +3118,28 @@ export default function App() {
     );
   }
 
-  return <HomeScreen onPlay={() => setScreen("signup")} setScreen={setScreen} />;
+  return (
+    <HomeScreen
+      darkMode={preferences.darkMode}
+      onPlay={() => setScreen("signup")}
+      setScreen={setScreen}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
-  eyeBreakPage: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#D5F5E7", padding: 20 },
+  eyeBreakPage: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "transparent", padding: 20 },
   eyeBreakPanel: { width: "100%", maxWidth: 420, alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#B8DFCC", borderWidth: 2, borderRadius: 20, padding: 24 },
   eyeBreakIcon: { fontSize: 54, marginBottom: 12 },
   eyeBreakTitle: { color: "#173B53", fontSize: 26, lineHeight: 32, fontWeight: "900", textAlign: "center", marginBottom: 10 },
   eyeBreakMessage: { color: "#36566A", fontSize: 16, lineHeight: 24, textAlign: "center", marginBottom: 22 },
   eyeBreakTimer: { color: "#28543A", fontSize: 48, lineHeight: 56, fontWeight: "900", fontVariant: ["tabular-nums"] },
   eyeBreakCaption: { color: "#46564B", fontSize: 14, lineHeight: 20, fontWeight: "700", marginTop: 2 },
-  limitReachedPage: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F1F4EF", padding: 20 },
+  limitReachedPage: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "transparent", padding: 20 },
   limitReachedPanel: { width: "100%", maxWidth: 420, backgroundColor: "#FFFFFF", borderColor: "#D8E1D7", borderWidth: 1, borderRadius: 14, padding: 22 },
   limitReachedTitle: { color: "#26352B", fontSize: 26, lineHeight: 32, fontWeight: "900", textAlign: "center", marginBottom: 10 },
   limitReachedText: { color: "#46564B", fontSize: 16, lineHeight: 24, textAlign: "center", marginBottom: 18 },
-  homePage: { flex: 1, backgroundColor: "#70CDE2", padding: 12 },
+  homePage: { flex: 1, backgroundColor: "transparent", padding: 12 },
   homeCard: {
     flex: 1,
     alignItems: "center",
@@ -3067,13 +3147,20 @@ const styles = StyleSheet.create({
     padding: 22,
     overflow: "hidden",
     borderRadius: 30,
-    backgroundColor: "#FFF8E7",
     shadowColor: "#24546A",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 5,
   },
+  homeCardDay: {
+    backgroundColor: "rgba(255, 248, 231, 0.72)",
+  },
+  homeCardNight: {
+    backgroundColor: "rgba(16, 25, 54, 0.76)",
+  },
+  homeTitleNight: { color: "#F3F4FF" },
+  homeSubtitleNight: { color: "#D2DAF0" },
   homeLogo: { width: 380, height: 380, marginBottom: 4 },
   homeTitle: { color: "#173B53", fontSize: 37, fontWeight: "900", textAlign: "center" },
   homeSubtitle: { color: "#36566A", fontSize: 17, fontWeight: "700", textAlign: "center", marginTop: 5, marginBottom: 22 },
@@ -3083,7 +3170,7 @@ const styles = StyleSheet.create({
   secondaryButton: { backgroundColor: "#258EA3", marginBottom: 6 },
   secondaryButtonText: { color: "#FFFDF5", fontSize: 14, textAlign: "left" },
   pressed: { opacity: 0.7 },
-  appPage: { flex: 1, backgroundColor: "#A6E5EE" },
+  appPage: { flex: 1, backgroundColor: "transparent" },
   scrollContent: { paddingHorizontal: 12, paddingTop: 1, paddingBottom: 95 },
   appTitle: { color: "#173B53", fontSize: 29, fontWeight: "900", textAlign: "center", marginTop: 39 },
   appSubtitle: { color: "#4A2F22", fontSize: 15, textAlign: "center", marginTop: 3, marginBottom: 19 },
@@ -3131,11 +3218,15 @@ const styles = StyleSheet.create({
   lessonPreviewNotice: { color: "#8C4B22", fontSize: 12, lineHeight: 18, fontWeight: "700", marginTop: 8 },
   lockedLesson: { backgroundColor: "#E2E8E7", borderRadius: 15, padding: 14, marginTop: 6 },
   lockedLessonText: { color: "#36566A", fontSize: 14, fontWeight: "700" },
-  offlineCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFDCCF", borderColor: "#F2A28B", borderWidth: 2, borderRadius: 20, padding: 18, marginTop: 3, marginBottom: 10 },
-  offlineModePanel: { backgroundColor: "#D5F5EB", borderColor: "#66CBB1", borderWidth: 2, borderRadius: 18, padding: 18, marginTop: 10 },
-  offlineCopy: { flex: 1, paddingRight: 10 },
+  offlineCard: { backgroundColor: "#E4F6EF", borderColor: "#9CCDBA", borderWidth: 1.5, borderRadius: 22, padding: 18, marginTop: 3, marginBottom: 10 },
+  offlineModePanel: { backgroundColor: "#E4F6EF", borderColor: "#9CCDBA", borderWidth: 1.5, borderRadius: 22, padding: 18, marginTop: 10 },
+  offlineMissionIcon: { width: 52, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: "#C8EBDD" },
+  offlineMissionEmoji: { fontSize: 28 },
+  offlineCopy: { flex: 1, paddingRight: 4 },
+  missionCardHeading: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
+  openMissionsButton: { alignSelf: "flex-start", backgroundColor: "#FFFFFF", borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, marginTop: 14 },
   cardBody: { color: "#36566A", fontSize: 15, lineHeight: 22 },
-  openButton: { color: "#173B53", backgroundColor: "#FFFFFF", paddingVertical: 12, paddingHorizontal: 16, borderRadius: 13, fontWeight: "800", fontSize: 14 },
+  openButton: { color: "#173B53", fontWeight: "800", fontSize: 14 },
   pageTitle: { color: "#173B53", fontSize: 28, fontWeight: "900", textAlign: "center", marginBottom: 6 },
   formMessage: { color: "#9C3E32", fontSize: 14, lineHeight: 20, fontWeight: "700", marginBottom: 12 },
   successMessage: { color: "#397147", fontSize: 14, lineHeight: 20, fontWeight: "700", marginBottom: 12 },
@@ -3203,7 +3294,21 @@ const styles = StyleSheet.create({
   navButtonTextActive: { color: "#F17D65" },
   addButton: { width: 60, height: 60, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "#F17D65", marginTop: -24, borderWidth: 3, borderColor: "#FFFFFF" },
   addButtonText: { color: "#FFFFFF", fontSize: 31, lineHeight: 34 },
-  loginContainer: { flex: 1, backgroundColor: "#70CDE2" },
+  bottomNavigationDark: { backgroundColor: "#202B40", borderTopColor: "#35445F" },
+  navButtonDark: { backgroundColor: "#29364D" },
+  navButtonActiveDark: { backgroundColor: "#384B69" },
+  navButtonTextDark: { color: "#C2CDDF" },
+  navButtonTextActiveDark: { color: "#F1D9A4" },
+  addButtonDark: { backgroundColor: "#587C91", borderColor: "#202B40" },
+  actionButtonPrimaryDark: { backgroundColor: "#9A685E" },
+  actionButtonSecondaryDark: { backgroundColor: "#456C7B" },
+  darkPanel: { backgroundColor: "#253149", borderColor: "#3B4A64" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkAccent: { backgroundColor: "#3B5067", borderColor: "#50617A" },
+  darkTrack: { backgroundColor: "#46546A" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
+  loginContainer: { flex: 1, backgroundColor: "transparent" },
   verificationContainer: { flex: 1, justifyContent: "center", padding: 20, gap: 12 },
   resendButton: { backgroundColor: "#587449" },
   editRegistrationButton: { backgroundColor: "#B85B42" },

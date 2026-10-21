@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { AppAppearanceContext } from "./CloudBackdrop";
 import {
   BlendTrainGame,
   ChooseKindlyGame,
@@ -134,6 +135,7 @@ export default function GradeOneLessonsScreen({
   lessonProgressReady,
   onCompleteLesson,
 }: Props) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const [view, setView] = useState<View_>({ kind: "units" });
 
   const activeUnit =
@@ -179,27 +181,27 @@ export default function GradeOneLessonsScreen({
   // ----- Unit view -----
   if (view.kind === "unit" && activeUnit) {
     return (
-      <SafeAreaView style={styles.page}>
+      <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Pressable onPress={() => setView({ kind: "units" })} style={styles.backBtn}>
             <Text style={styles.backBtnText}>Back</Text>
           </Pressable>
-          <View style={styles.hero}>
+          <View style={[styles.hero, darkMode && styles.darkCard]}>
             <Text style={styles.bigEmoji}>{activeUnit.emoji}</Text>
-            <Text style={styles.heroTitle}>
+            <Text style={[styles.heroTitle, darkMode && styles.darkText]}>
               Unit {activeUnit.number}: {activeUnit.title}
             </Text>
-            <Text style={styles.heroSub}>{activeUnit.focus}</Text>
-            <Text style={styles.starsText}>
+            <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>{activeUnit.focus}</Text>
+            <Text style={[styles.starsText, darkMode && styles.darkText]}>
               ⭐ {unitStars(activeUnit)} / {activeUnit.games.length * LEVELS.length}
             </Text>
           </View>
 
           {activeUnit.games.map((game) => (
-            <View key={game.id} style={styles.card}>
+            <View key={game.id} style={[styles.card, darkMode && styles.darkCard]}>
               <Text style={styles.cardEmoji}>{game.emoji}</Text>
-              <Text style={styles.cardTitle}>{game.title}</Text>
-              <Text style={styles.cardBlurb}>{game.blurb}</Text>
+              <Text style={[styles.cardTitle, darkMode && styles.darkText]}>{game.title}</Text>
+              <Text style={[styles.cardBlurb, darkMode && styles.darkMutedText]}>{game.blurb}</Text>
                             <View style={styles.levelRow}>
                 {LEVELS.map((level) => {
                   const done = isDone(activeUnit.id, game.id, level);
@@ -220,7 +222,7 @@ export default function GradeOneLessonsScreen({
                       ]}
                     >
                       <Text style={styles.levelStar}>{done ? "⭐" : unlocked ? "▶" : "🔒"}</Text>
-                      <Text style={styles.levelText}>{LEVEL_LABELS[level - 1]}</Text>
+                      <Text style={[styles.levelText, darkMode && styles.darkText]}>{LEVEL_LABELS[level - 1]}</Text>
                     </Pressable>
                   );
                 })}
@@ -228,8 +230,8 @@ export default function GradeOneLessonsScreen({
             </View>
           ))}
 
-          <View style={styles.badgeCard}>
-            <Text style={styles.cardTitle}>
+          <View style={[styles.badgeCard, darkMode && styles.darkCard]}>
+            <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
               {unitStars(activeUnit) === activeUnit.games.length * LEVELS.length
                 ? "🏅 Unit badge earned!"
                 : "🏅 Finish every level to earn the unit badge"}
@@ -242,27 +244,27 @@ export default function GradeOneLessonsScreen({
 
   // ----- Unit picker -----
   return (
-    <SafeAreaView style={styles.page}>
+    <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Pressable onPress={onBack} style={styles.backBtn}>
           <Text style={styles.backBtnText}>Back</Text>
         </Pressable>
-        <View style={styles.hero}>
+        <View style={[styles.hero, darkMode && styles.darkCard]}>
           <Text style={styles.bigEmoji}>🌈</Text>
-          <Text style={styles.heroTitle}>Choose an adventure</Text>
-          <Text style={styles.heroSub}>Pick a unit to start playing!</Text>
+          <Text style={[styles.heroTitle, darkMode && styles.darkText]}>Choose an adventure</Text>
+          <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>Pick a unit to start playing!</Text>
         </View>
         {gradeOneUnits.map((unit) => (
           <Pressable
             key={unit.id}
             onPress={() => setView({ kind: "unit", unitId: unit.id })}
-            style={styles.card}
+            style={[styles.card, darkMode && styles.darkCard]}
           >
             <Text style={styles.cardEmoji}>{unit.emoji}</Text>
-            <Text style={styles.cardTitle}>
+            <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
               Unit {unit.number}: {unit.title}
             </Text>
-            <Text style={styles.meta}>
+            <Text style={[styles.meta, darkMode && styles.darkMutedText]}>
               {unit.games.length} {unit.games.length === 1 ? "game" : "games"} · ⭐{" "}
               {unitStars(unit)}/{unit.games.length * LEVELS.length} →
             </Text>
@@ -276,7 +278,7 @@ export default function GradeOneLessonsScreen({
 // ---------- Styles (same palette as index.tsx) ----------
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#F2FBFD" },
+  page: { flex: 1, backgroundColor: "transparent" },
   scroll: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 40 },
   centerPanel: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   backBtn: {
@@ -346,6 +348,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   basketLabel: { color: "#173B53", fontSize: 16, fontWeight: "900", marginBottom: 8 },
+  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
   basketItems: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
   basketEmoji: { fontSize: 32 },
   counterRow: {

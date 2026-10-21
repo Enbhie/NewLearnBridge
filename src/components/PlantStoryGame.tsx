@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { playFeedback } from "../utils/soundEffects";
 
 type PlantChoice = {
   id: string;
@@ -81,9 +82,11 @@ export default function PlantStoryGame({ onBack, onFinish }: Props) {
   const choosePlant = (choice: PlantChoice) => {
     setChosenPlant(choice.id);
     if (choice.id === scene.target) {
+      playFeedback("success");
       setFeedback(`${scene.success} ${choice.use}`);
       return;
     }
+    playFeedback("error");
     setFeedback(
       `${choice.name} ${choice.use.toLowerCase()} Look for the plant that fits this family's need.`
     );
@@ -225,7 +228,7 @@ export default function PlantStoryGame({ onBack, onFinish }: Props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#EAF5F7" },
+  screen: { flex: 1, backgroundColor: "transparent" },
   content: { padding: 18, paddingBottom: 28 },
   backButton: {
     alignSelf: "flex-start",

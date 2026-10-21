@@ -4,12 +4,12 @@ import {
   ActivityIndicator,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { WebView } from "react-native-webview";
+import { AnimatedPressable as TouchableOpacity } from "../components/AnimatedPressable";
 import { offlineMissions } from "../data/offlineMissions";
 import { markMissionComplete } from "../data/missionProgress";
 
@@ -544,7 +544,7 @@ export default function ShapeRecognitionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#EAF5F7",
+    backgroundColor: "transparent",
     alignItems: "center",
     padding: 20,
   },

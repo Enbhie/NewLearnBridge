@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { playFeedback } from "../utils/soundEffects";
 
 export type MathLessonCategory =
   | "multiplication"
@@ -429,7 +430,10 @@ export default function GradeThreeMathScreen({
     if (!lesson || picked !== null) return;
     setPicked(choice);
     if (choice === lesson.problems[qIdx].answer) {
+      playFeedback("success");
       setScore((currentScore) => currentScore + 1);
+    } else {
+      playFeedback("error");
     }
   };
 
@@ -683,7 +687,7 @@ const INK = "#1B2540";
 const MUTED = "#5B6784";
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#F3F6FF" },
+  page: { flex: 1, backgroundColor: "transparent" },
   content: {
     padding: 16,
     paddingBottom: 40,

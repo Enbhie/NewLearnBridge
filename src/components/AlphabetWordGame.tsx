@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   PanResponder,
@@ -13,6 +13,7 @@ import {
 import * as Speech from "expo-speech";
 import { playFeedback } from "../utils/soundEffects";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { AppAppearanceContext } from "./CloudBackdrop";
 
 const words = [
   { word: "CAT", clue: "A furry pet that says meow.", emoji: "🐱" },
@@ -42,6 +43,7 @@ function shuffle<T,>(items: T[]): T[] {
 }
 
 function DraggableLetter({ id, letter, onDrop }: LetterTileProps) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const position = useRef(new Animated.ValueXY()).current;
   const responder = useMemo(
     () =>
@@ -74,7 +76,11 @@ function DraggableLetter({ id, letter, onDrop }: LetterTileProps) {
   return (
     <Animated.View
       {...responder.panHandlers}
-      style={[styles.letterTile, { transform: position.getTranslateTransform() }]}
+      style={[
+        styles.letterTile,
+        darkMode && styles.darkLetterTile,
+        { transform: position.getTranslateTransform() },
+      ]}
       accessibilityLabel={`Drag letter ${letter}`}
       accessibilityRole="button"
     >
@@ -90,6 +96,7 @@ export default function AlphabetWordGame({
   onBack: () => void;
   onFinish: (results: GameResults) => void;
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const slotSize = Math.min(116, Math.max(88, (width - 72) / 3));
@@ -209,8 +216,8 @@ export default function AlphabetWordGame({
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.topBar}>
+    <SafeAreaView style={[styles.screen, darkMode && styles.darkScreen]}>
+      <View style={[styles.topBar, darkMode && styles.darkTopBar]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back"
@@ -220,8 +227,8 @@ export default function AlphabetWordGame({
           <Text style={styles.backText}>Back</Text>
         </Pressable>
         <View style={styles.progressCopy}>
-          <Text style={styles.progressTitle}>Alphabet Word Builder</Text>
-          <Text style={styles.progressSubtitle}>Word {roundIndex + 1} of {words.length}</Text>
+          <Text style={[styles.progressTitle, darkMode && styles.darkText]}>Alphabet Word Builder</Text>
+          <Text style={[styles.progressSubtitle, darkMode && styles.darkMutedText]}>Word {roundIndex + 1} of {words.length}</Text>
         </View>
         <Text style={styles.progressEmoji}>🔤</Text>
       </View>
@@ -234,10 +241,10 @@ export default function AlphabetWordGame({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.playArea}>
-          <View style={styles.wordPanel}>
+          <View style={[styles.wordPanel, darkMode && styles.darkCard]}>
             <Text style={styles.wordEmoji}>{current.emoji}</Text>
-            <Text style={styles.instruction}>Build the word!</Text>
-            <Text style={styles.clue}>{current.clue}</Text>
+            <Text style={[styles.instruction, darkMode && styles.darkText]}>Build the word!</Text>
+            <Text style={[styles.clue, darkMode && styles.darkMutedText]}>{current.clue}</Text>
             <View style={styles.slotsRow}>
               {letters.map((letter, index) => (
                 <View
@@ -257,6 +264,7 @@ export default function AlphabetWordGame({
                       styles.slotLetter,
                       { fontSize: slotSize * 0.72 },
                       placed[index] !== null && styles.slotLetterFilled,
+                      darkMode && styles.darkText,
                     ]}
                   >
                     {placed[index] === null ? letter : letters[placed[index]!]}
@@ -266,8 +274,8 @@ export default function AlphabetWordGame({
             </View>
           </View>
 
-          <View style={styles.letterPanel}>
-            <Text style={styles.letterPanelTitle}>Find the letters</Text>
+          <View style={[styles.letterPanel, darkMode && styles.darkCard]}>
+            <Text style={[styles.letterPanelTitle, darkMode && styles.darkText]}>Find the letters</Text>
             <View style={styles.letterTray}>
               {tileOrder.map((tileId) =>
                 placed.includes(tileId) ? (
@@ -284,7 +292,11 @@ export default function AlphabetWordGame({
             </View>
             <Text
               accessibilityLiveRegion="polite"
-              style={[styles.feedback, finishedWord && styles.feedbackComplete]}
+              style={[
+                styles.feedback,
+                darkMode && styles.darkMutedText,
+                finishedWord && styles.feedbackComplete,
+              ]}
             >
               {feedback}
             </Text>
@@ -307,7 +319,7 @@ export default function AlphabetWordGame({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F3FBFC" },
+  screen: { flex: 1, backgroundColor: "transparent" },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -403,4 +415,10 @@ const styles = StyleSheet.create({
   },
   continueText: { color: "#FFFFFF", fontSize: 17, fontWeight: "900" },
   pressed: { opacity: 0.72 },
+  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkTopBar: { backgroundColor: "#202B40", borderBottomColor: "#35445F" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkLetterTile: { backgroundColor: "#456C7B", borderBottomColor: "#324F5D" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
 });

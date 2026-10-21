@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Animated, PanResponder, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { playFeedback } from "../utils/soundEffects";
 
 export type GameProps = { level: number; onExit: () => void; onPassed: () => void };
 
@@ -103,7 +104,9 @@ export function ChoiceGame({
   const pick = (index: number) => {
     if (chosen !== null) return;
     setChosen(index);
-    if (current.options[index].correct) setScore((s) => s + 1);
+    const correct = current.options[index].correct;
+    playFeedback(correct ? "success" : "error");
+    if (correct) setScore((s) => s + 1);
   };
 
   const next = () => {
@@ -351,6 +354,7 @@ export function SafeCrossingGame({ level, onExit, onPassed }: GameProps) {
       setScore((s) => s + 1);
       setOutcome({ safe: true, msg: "✅ Safe crossing! You waited and looked both ways." });
     }
+    playFeedback(light === "green" && left && right ? "success" : "error");
   };
 
   const next = () => {
@@ -605,12 +609,14 @@ export function HouseBuilderGame({ level, onExit, onPassed }: GameProps) {
     );
     if (!target) {
       setMessage(`Try another spot for the ${piece.shape}.`);
+      playFeedback("error");
       return false;
     }
     const nextFilled = { ...filled, [target.key]: true };
     setFilled(nextFilled);
     setUsed((u) => [...u, piece.id]);
     setMessage("Nice fit!");
+    playFeedback("success");
     if (slotDefs.every((s) => nextFilled[s.key])) {
       setFinished(true);
       onPassed();
@@ -735,12 +741,14 @@ export function HealthyRoutineGame({ level, onExit, onPassed }: GameProps) {
     }
     if (slotIndex !== piece.order) {
       setMessage("Not yet. Think about what comes first.");
+      playFeedback("error");
       return false;
     }
     const nextPlaced = { ...placed, [slotIndex]: piece };
     setPlaced(nextPlaced);
     setUsed((u) => [...u, piece.order]);
     setMessage("Right! Keep going.");
+    playFeedback("success");
     if (routine.steps.every((_, i) => nextPlaced[i])) {
       setFinished(true);
       onPassed();
@@ -808,7 +816,7 @@ export function HealthyRoutineGame({ level, onExit, onPassed }: GameProps) {
 export const styles = StyleSheet.create({
   optionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center" },
   optionGridItem: { width: "47%", marginBottom: 0, justifyContent: "center" },
-  page: { flex: 1, backgroundColor: "#F2FBFD" },
+  page: { flex: 1, backgroundColor: "transparent" },
   scroll: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 40 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   backBtn: { alignSelf: "flex-start", backgroundColor: "#C62828", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginBottom: 10 },

@@ -514,7 +514,7 @@ export default function FruitGroupingGame({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#FFF8E7" },
+  screen: { flex: 1, backgroundColor: "transparent" },
   topBar: {
     flexDirection: "row",
     alignItems: "center",

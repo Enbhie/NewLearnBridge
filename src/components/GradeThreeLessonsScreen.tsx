@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { playFeedback } from "../utils/soundEffects";
 import GradeThreeMathScreen from "../data/MathematicsCurriculum";
 import {
   englishLessons,
@@ -227,7 +228,9 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
 
   const checkEnglishAnswer = () => {
     if (!englishQuiz || !selectedQuizAnswer || quizChecked) return;
-    if (selectedQuizAnswer === englishQuiz.correctAnswer) {
+    const correct = selectedQuizAnswer === englishQuiz.correctAnswer;
+    playFeedback(correct ? "success" : "error");
+    if (correct) {
       setEnglishScore((score) => score + 1);
     }
     setQuizChecked(true);
@@ -268,9 +271,11 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
     }
 
     const answerKey = `${scienceLessonIndex}-${scienceActivityIndex}-${scienceQuestionIndex}`;
+    const correct = scienceSelectedAnswer === scienceQuestion.answer;
+    playFeedback(correct ? "success" : "error");
     setScienceCorrectAnswers((answers) => {
       const updatedAnswers = new Set(answers);
-      if (scienceSelectedAnswer === scienceQuestion.answer) {
+      if (correct) {
         updatedAnswers.add(answerKey);
       } else {
         updatedAnswers.delete(answerKey);
@@ -341,9 +346,11 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
       return;
     }
     const answerKey = `${healthLessonIndex}-${healthActivityIndex}-${healthQuestionIndex}`;
+    const correct = healthSelectedAnswer === healthQuestion.answer;
+    playFeedback(correct ? "success" : "error");
     setHealthCorrectAnswers((answers) => {
       const updatedAnswers = new Set(answers);
-      if (healthSelectedAnswer === healthQuestion.answer) {
+      if (correct) {
         updatedAnswers.add(answerKey);
       } else {
         updatedAnswers.delete(answerKey);
@@ -1231,7 +1238,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#F4F8FF",
+    backgroundColor: "transparent",
   },
   container: {
     width: "100%",

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import {
+  Animated,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -8,6 +9,8 @@ import {
 } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import type { CategoryId } from "../data/learningContent";
+import { playFeedback } from "../utils/soundEffects";
+import { AppAppearanceContext } from "./CloudBackdrop";
 
 export type LessonDifficulty = "easy" | "standard" | "challenge";
 
@@ -651,6 +654,7 @@ export default function GradeTwoLessonsScreen({
   lessonProgressReady,
   onCompleteLesson,
 }: Props) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [roundQuestions, setRoundQuestions] = useState<Challenge[]>([]);
@@ -658,6 +662,10 @@ export default function GradeTwoLessonsScreen({
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerIsCorrect, setAnswerIsCorrect] = useState<boolean | null>(null);
   const [finished, setFinished] = useState(false);
+  const previousCompletedRef = useRef(new Set(completedLessonIds));
+  const [unlockingLessonId, setUnlockingLessonId] = useState<string | null>(null);
+  const unlockFade = useRef(new Animated.Value(1)).current;
+  const unlockScale = useRef(new Animated.Value(1)).current;
 
   const currentChallenge = roundQuestions[questionIndex];
   const currentLessonId =
@@ -682,6 +690,54 @@ export default function GradeTwoLessonsScreen({
               !completedLessonIds.includes(getLessonProgressId(activeSubject, lesson))
           )
     );
+
+  useEffect(() => {
+    const newlyCompleted = completedLessonIds.find(
+      (lessonId) => !previousCompletedRef.current.has(lessonId)
+    );
+    previousCompletedRef.current = new Set(completedLessonIds);
+    if (!newlyCompleted || !activeSubject) return;
+
+    const completedIndex = activeSubject.lessons.findIndex(
+      (lesson) => getLessonProgressId(activeSubject, lesson) === newlyCompleted
+    );
+    if (completedIndex < 0) return;
+    const nextLesson = activeSubject.lessons[completedIndex + 1];
+    if (!nextLesson) return;
+
+    setUnlockingLessonId(getLessonProgressId(activeSubject, nextLesson));
+  }, [activeSubject, completedLessonIds]);
+
+  useEffect(() => {
+    if (!unlockingLessonId || activeLesson) return;
+    unlockFade.setValue(0.25);
+    unlockScale.setValue(0.94);
+    const animation = Animated.parallel([
+      Animated.timing(unlockFade, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.spring(unlockScale, {
+          toValue: 1.06,
+          useNativeDriver: true,
+          speed: 14,
+          bounciness: 8,
+        }),
+        Animated.spring(unlockScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          speed: 12,
+          bounciness: 4,
+        }),
+      ]),
+    ]);
+    animation.start(({ finished: animationFinished }) => {
+      if (animationFinished) setUnlockingLessonId(null);
+    });
+    return () => animation.stop();
+  }, [activeLesson, unlockFade, unlockScale, unlockingLessonId]);
 
   const resetGame = () => {
     setRoundQuestions([]);
@@ -715,7 +771,9 @@ export default function GradeTwoLessonsScreen({
 
   const checkAnswer = () => {
     if (!currentChallenge || !selectedAnswer) return;
-    setAnswerIsCorrect(selectedAnswer === currentChallenge.answer);
+    const correct = selectedAnswer === currentChallenge.answer;
+    setAnswerIsCorrect(correct);
+    playFeedback(correct ? "success" : "error");
   };
 
   const advanceChallenge = () => {
@@ -731,7 +789,7 @@ export default function GradeTwoLessonsScreen({
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, darkMode && styles.darkScreen]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Pressable
           accessibilityRole="button"
@@ -741,15 +799,15 @@ export default function GradeTwoLessonsScreen({
           <Text style={styles.backButtonText}>Back</Text>
         </Pressable>
 
-        <View style={styles.header}>
+        <View style={[styles.header, darkMode && styles.darkCard]}>
           <Text style={styles.headerIcon}>
             {activeSubject?.emoji ?? "🌈"}
           </Text>
-          <Text style={styles.gradeLabel}>GRADE 2 ONLINE LESSONS</Text>
-          <Text style={styles.title}>
+          <Text style={[styles.gradeLabel, darkMode && styles.darkMutedText]}>GRADE 2 ONLINE LESSONS</Text>
+          <Text style={[styles.title, darkMode && styles.darkText]}>
             {activeLesson?.title ?? activeSubject?.title ?? "Choose an adventure"}
           </Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.subtitle, darkMode && styles.darkMutedText]}>
             {activeLesson
               ? "Learn the idea, then play the challenge!"
               : activeSubject
@@ -761,10 +819,10 @@ export default function GradeTwoLessonsScreen({
         {activeLesson && activeSubject ? (
           <View style={styles.lessonContent}>
             {finished ? (
-              <View style={styles.finishCard}>
+              <View style={[styles.finishCard, darkMode && styles.darkCard]}>
                 <Text style={styles.finishEmoji}>⭐</Text>
-                <Text style={styles.cardTitle}>Quarter complete!</Text>
-                <Text style={styles.finishHint}>
+                <Text style={[styles.cardTitle, darkMode && styles.darkText]}>Quarter complete!</Text>
+                <Text style={[styles.finishHint, darkMode && styles.darkMutedText]}>
                   Difficulty: {difficultyLabels[difficulty]}
                 </Text>
                 <View style={styles.difficultyControls}>
@@ -803,10 +861,10 @@ export default function GradeTwoLessonsScreen({
                 </View>
               </View>
             ) : isLessonLocked ? (
-              <View style={styles.lockedCard}>
-                <Text style={styles.cardTitle}>Lesson preview</Text>
-                <Text style={styles.bodyText}>{activeLesson.overview}</Text>
-                <Text style={styles.hintText}>
+              <View style={[styles.lockedCard, darkMode && styles.darkCard]}>
+                <Text style={[styles.cardTitle, darkMode && styles.darkText]}>Lesson preview</Text>
+                <Text style={[styles.bodyText, darkMode && styles.darkMutedText]}>{activeLesson.overview}</Text>
+                <Text style={[styles.hintText, darkMode && styles.darkMutedText]}>
                   {!lessonProgressReady
                     ? "Loading your saved lesson progress..."
                     : "Finish the earlier quarter on this subject trail to play this challenge."}
@@ -814,21 +872,21 @@ export default function GradeTwoLessonsScreen({
               </View>
             ) : (
               <>
-                <View style={styles.learnCard}>
-                  <Text style={styles.cardTitle}>Learn it</Text>
-                  <Text style={styles.bodyText}>{activeLesson.overview}</Text>
+                <View style={[styles.learnCard, darkMode && styles.darkCard]}>
+                  <Text style={[styles.cardTitle, darkMode && styles.darkText]}>Learn it</Text>
+                  <Text style={[styles.bodyText, darkMode && styles.darkMutedText]}>{activeLesson.overview}</Text>
                   {activeLesson.topics.map((topic) => (
                     <View style={styles.topicRow} key={topic}>
                       <Text style={styles.topicBullet}>•</Text>
-                      <Text style={styles.topicText}>{topic}</Text>
+                      <Text style={[styles.topicText, darkMode && styles.darkMutedText]}>{topic}</Text>
                     </View>
                   ))}
                 </View>
 
                 {currentChallenge ? (
-                  <View style={styles.gameCard}>
+                  <View style={[styles.gameCard, darkMode && styles.darkCard]}>
                     <View style={styles.gameHeader}>
-                      <Text style={styles.gameTitle}>🎮 Play and practice</Text>
+                      <Text style={[styles.gameTitle, darkMode && styles.darkText]}>🎮 Play and practice</Text>
                       <Text style={styles.questionCount}>
                         {questionIndex + 1} / {roundQuestions.length}
                       </Text>
@@ -838,7 +896,7 @@ export default function GradeTwoLessonsScreen({
                         {difficultyLabels[difficulty]} difficulty
                       </Text>
                     </View>
-                    <View style={styles.questionTrack}>
+                    <View style={[styles.questionTrack, darkMode && styles.darkTrack]}>
                       <View
                         style={[
                           styles.questionProgress,
@@ -846,7 +904,7 @@ export default function GradeTwoLessonsScreen({
                         ]}
                       />
                     </View>
-                    <Text style={styles.prompt}>{currentChallenge.prompt}</Text>
+                    <Text style={[styles.prompt, darkMode && styles.darkText]}>{currentChallenge.prompt}</Text>
                     <View style={styles.options}>
                       {currentChallenge.options.map((option) => {
                         const selected = selectedAnswer === option;
@@ -862,12 +920,14 @@ export default function GradeTwoLessonsScreen({
                             }}
                             style={({ pressed }) => [
                               styles.option,
+                              darkMode && styles.darkOption,
                               selected && styles.selectedOption,
                               answerIsCorrect === true && selected && styles.correctOption,
+                              darkMode && selected && styles.darkSelectedOption,
                               pressed && styles.pressed,
                             ]}
                           >
-                            <Text style={[styles.optionText, selected && styles.selectedOptionText]}>
+                            <Text style={[styles.optionText, darkMode && styles.darkMutedText, selected && styles.selectedOptionText]}>
                               {option}
                             </Text>
                           </Pressable>
@@ -918,7 +978,9 @@ export default function GradeTwoLessonsScreen({
           <View style={styles.trail}>
             <View style={styles.trailHeading}>
               <Text style={styles.trailFlag}>🚩</Text>
-              <Text style={styles.trailTitle}>Your {activeSubject.title} trail</Text>
+              <Text style={[styles.trailTitle, darkMode && styles.darkText]}>
+                Your {activeSubject.title} adventure
+              </Text>
             </View>
             {activeSubject.lessons.map((lesson, index) => {
               const lessonId = getLessonProgressId(activeSubject, lesson);
@@ -932,25 +994,72 @@ export default function GradeTwoLessonsScreen({
                       !completedLessonIds.includes(getLessonProgressId(activeSubject, previous))
                   );
               return (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${locked ? "Preview locked" : "Open"} lesson ${index + 1}: ${lesson.title}`}
-                  key={lesson.id}
-                  onPress={() => startLesson(lesson)}
-                  style={({ pressed }) => [styles.lessonCard, pressed && styles.pressed]}
-                >
-                  <View style={[styles.stepNumber, complete && styles.completeStep]}>
-                    <Text style={styles.stepNumberText}>{complete ? "✓" : index + 1}</Text>
+                <View style={styles.trailStep} key={lesson.id}>
+                  <View style={styles.roadColumn}>
+                    {index < activeSubject.lessons.length - 1 ? (
+                      <View
+                        style={[
+                          styles.roadConnector,
+                          complete && styles.roadConnectorComplete,
+                        ]}
+                      />
+                    ) : (
+                      <Text style={styles.roadFinish}>🏁</Text>
+                    )}
+                    <View
+                      style={[
+                        styles.roadNode,
+                        complete && styles.roadNodeComplete,
+                        locked && styles.roadNodeLocked,
+                      ]}
+                    >
+                      <Text style={styles.roadNodeText}>{complete ? "✓" : index + 1}</Text>
+                    </View>
                   </View>
-                  <View style={styles.lessonCopy}>
-                    <Text style={styles.stepStatus}>
-                      {complete ? "COMPLETED · REPLAY" : !lessonProgressReady ? "LOADING" : locked ? "LOCKED · PREVIEW" : "READY · PLAY GAME"}
-                    </Text>
-                    <Text style={styles.lessonTitle}>{lesson.title}</Text>
-                    <Text style={styles.lessonOverview}>{lesson.overview}</Text>
-                  </View>
-                  <Text style={styles.lessonArrow}>{locked ? "🔒" : "›"}</Text>
-                </Pressable>
+                  <Animated.View
+                    style={[
+                      styles.trailCardWrap,
+                      unlockingLessonId === lessonId && {
+                        opacity: unlockFade,
+                        transform: [{ scale: unlockScale }],
+                      },
+                    ]}
+                  >
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${locked ? "Preview locked" : "Open"} lesson ${index + 1}: ${lesson.title}`}
+                      onPress={() => startLesson(lesson)}
+                      style={({ pressed }) => [
+                        styles.lessonCard,
+                        darkMode && styles.darkCard,
+                        locked && styles.lockedLessonCard,
+                        darkMode && locked && styles.darkLockedLessonCard,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <View style={styles.lessonCopy}>
+                        <Text
+                          style={[
+                            styles.stepStatus,
+                            darkMode && styles.darkMutedText,
+                            complete && (darkMode ? styles.darkCompleteStatus : styles.completeStatus),
+                          ]}
+                        >
+                          {complete ? "COMPLETED · REPLAY" : !lessonProgressReady ? "LOADING" : locked ? "LOCKED · PREVIEW" : "READY · PLAY GAME"}
+                        </Text>
+                        <Text style={[styles.lessonTitle, darkMode && styles.darkText]}>
+                          {lesson.title}
+                        </Text>
+                        <Text style={[styles.lessonOverview, darkMode && styles.darkMutedText]}>
+                          {lesson.overview}
+                        </Text>
+                      </View>
+                      <Text style={[styles.lessonArrow, darkMode && styles.darkMutedText]}>
+                        {locked ? "🔒" : "›"}
+                      </Text>
+                    </Pressable>
+                  </Animated.View>
+                </View>
               );
             })}
           </View>
@@ -965,13 +1074,21 @@ export default function GradeTwoLessonsScreen({
                   setActiveSubject(subject);
                   onMusicCategoryChange(subject.id);
                 }}
-                style={({ pressed }) => [styles.subjectCard, pressed && styles.pressed]}
+                style={({ pressed }) => [
+                  styles.subjectCard,
+                  darkMode && styles.darkCard,
+                  pressed && styles.pressed,
+                ]}
               >
                 <Text style={styles.subjectIcon}>{subject.emoji}</Text>
-                <Text style={styles.subjectTitle}>{subject.title}</Text>
+                <Text style={[styles.subjectTitle, darkMode && styles.darkText]}>
+                  {subject.title}
+                </Text>
                 <View style={styles.subjectFooter}>
-                  <Text style={styles.subjectCount}>{subject.lessons.length} lessons</Text>
-                  <Text style={styles.subjectArrow}>→</Text>
+                  <Text style={[styles.subjectCount, darkMode && styles.darkMutedText]}>
+                    {subject.lessons.length} lessons
+                  </Text>
+                  <Text style={[styles.subjectArrow, darkMode && styles.darkMutedText]}>→</Text>
                 </View>
               </Pressable>
             ))}
@@ -983,7 +1100,7 @@ export default function GradeTwoLessonsScreen({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F3FBFC" },
+  screen: { flex: 1, backgroundColor: "transparent" },
   content: { padding: 20, paddingBottom: 36 },
   backButton: { alignSelf: "flex-start", minHeight: 42, minWidth: 64, borderRadius: 8, backgroundColor: "#C62828", alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
   backButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
@@ -1003,10 +1120,19 @@ const styles = StyleSheet.create({
   trailHeading: { alignItems: "center", flexDirection: "row", gap: 10, marginBottom: 4, paddingLeft: 6 },
   trailFlag: { fontSize: 26 },
   trailTitle: { color: "#315C4A", fontSize: 17, fontWeight: "900" },
-  lessonCard: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 18, borderWidth: 1.5, flexDirection: "row", gap: 12, padding: 14 },
-  stepNumber: { alignItems: "center", backgroundColor: "#B8EDF3", borderColor: "#78C7D2", borderRadius: 19, borderWidth: 2, height: 38, justifyContent: "center", width: 38 },
-  completeStep: { backgroundColor: "#BDE7C2", borderColor: "#72B77D" },
-  stepNumberText: { color: "#173B53", fontSize: 15, fontWeight: "900" },
+  trailStep: { alignItems: "stretch", flexDirection: "row", gap: 8 },
+  roadColumn: { alignItems: "center", alignSelf: "stretch", position: "relative", width: 42 },
+  roadConnector: { position: "absolute", backgroundColor: "#A9D7CE", borderRadius: 3, width: 5, top: 34, bottom: -12 },
+  roadConnectorComplete: { backgroundColor: "#6FB78E" },
+  roadNode: { alignItems: "center", backgroundColor: "#D6EEF1", borderColor: "#78C7D2", borderRadius: 18, borderWidth: 2, height: 36, justifyContent: "center", marginTop: 15, width: 36, zIndex: 1 },
+  roadNodeComplete: { backgroundColor: "#BDE7C2", borderColor: "#72B77D" },
+  roadNodeLocked: { backgroundColor: "#E2E7EA", borderColor: "#B7C1C7" },
+  roadNodeText: { color: "#173B53", fontSize: 14, fontWeight: "900" },
+  roadFinish: { fontSize: 22, marginTop: 19, zIndex: 1 },
+  trailCardWrap: { flex: 1 },
+  lessonCard: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 18, borderWidth: 1.5, flexDirection: "row", gap: 12, minHeight: 94, padding: 14 },
+  lockedLessonCard: { backgroundColor: "#F1F4F5", borderColor: "#D4DEE1" },
+  darkLockedLessonCard: { backgroundColor: "#26334A", borderColor: "#3C4B63" },
   lessonCopy: { flex: 1 },
   stepStatus: { color: "#258EA3", fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
   lessonTitle: { color: "#173B53", fontSize: 15, fontWeight: "900", lineHeight: 20, marginTop: 4 },
@@ -1049,4 +1175,13 @@ const styles = StyleSheet.create({
   difficultyButtonDisabled: { backgroundColor: "#A8B8BC" },
   difficultyButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   pressed: { opacity: 0.72 },
+  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkOption: { backgroundColor: "#29364D", borderColor: "#54647D" },
+  darkSelectedOption: { backgroundColor: "#394C68", borderColor: "#7897B0" },
+  darkTrack: { backgroundColor: "#46546A" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
+  completeStatus: { color: "#397147" },
+  darkCompleteStatus: { color: "#9ADAA5" },
 });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import {
     SafeAreaView,
     ScrollView,
@@ -7,6 +7,7 @@ import {
     View,
 } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { AppAppearanceContext } from "./CloudBackdrop";
 
 const characters = [
   {
@@ -48,16 +49,17 @@ type Props = {
 };
 
 export default function CharacterSelectScreen({ gradeLabel, lessonTitle, onSelect }: Props) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, darkMode && styles.darkScreen]}>
       <View style={styles.titleWrap}>
-        <Text style={styles.title}>Who's shopping today?</Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.title, darkMode && styles.darkText]}>Who's shopping today?</Text>
+        <Text style={[styles.subtitle, darkMode && styles.darkMutedText]}>
           {gradeLabel} · {lessonTitle}
         </Text>
-        <Text style={styles.lessonContext}>Pick your character to start this lesson.</Text>
+        <Text style={[styles.lessonContext, darkMode && styles.darkMutedText]}>Pick your character to start this lesson.</Text>
       </View>
 
       <ScrollView
@@ -76,18 +78,20 @@ export default function CharacterSelectScreen({ gradeLabel, lessonTitle, onSelec
               onPress={() => setSelected(character.id)}
               style={({ pressed }) => [
                 styles.characterCard,
+                darkMode && styles.darkCard,
                 isSelected && styles.selectedCard,
+                darkMode && isSelected && styles.darkSelectedCard,
                 pressed && styles.pressed,
               ]}
             >
               <Text style={styles.emoji}>{character.emoji}</Text>
               <View style={styles.characterCopy}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.name}>{character.name}</Text>
-                  <Text style={styles.meta}>{character.meta}</Text>
+                  <Text style={[styles.name, darkMode && styles.darkText]}>{character.name}</Text>
+                  <Text style={[styles.meta, darkMode && styles.darkMutedText]}>{character.meta}</Text>
                 </View>
-                <Text style={styles.role}>{character.role}</Text>
-                <Text style={styles.description}>{character.description}</Text>
+                <Text style={[styles.role, darkMode && styles.darkMutedText]}>{character.role}</Text>
+                <Text style={[styles.description, darkMode && styles.darkMutedText]}>{character.description}</Text>
                 <View style={styles.traits}>
                   {character.traits.map((trait) => (
                     <Text style={styles.trait} key={trait}>
@@ -101,7 +105,7 @@ export default function CharacterSelectScreen({ gradeLabel, lessonTitle, onSelec
         })}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, darkMode && styles.darkFooter]}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: !selected }}
@@ -121,7 +125,7 @@ export default function CharacterSelectScreen({ gradeLabel, lessonTitle, onSelec
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#FFFDF5" },
+  screen: { flex: 1, backgroundColor: "transparent" },
   titleWrap: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 12 },
   title: { color: "#4A2F22", fontSize: 28, fontWeight: "900" },
   subtitle: { color: "#6E675D", fontSize: 15, marginTop: 5 },
@@ -170,4 +174,10 @@ const styles = StyleSheet.create({
   disabledButton: { backgroundColor: "#B9C3B0" },
   startButtonText: { color: "#FFFDF5", fontSize: 16, fontWeight: "800" },
   pressed: { opacity: 0.7 },
+  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkSelectedCard: { backgroundColor: "#394C68", borderColor: "#7897B0" },
+  darkFooter: { backgroundColor: "#202B40", borderTopColor: "#35445F" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
 });

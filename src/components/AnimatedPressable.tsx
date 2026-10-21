@@ -19,7 +19,7 @@ type AnimatedPressableProps = PressableProps & {
 export function AnimatedPressable({
   onPressIn,
   onPressOut,
-  pressScale = 0.96,
+  pressScale = 0.92,
   soundEffect = "tap",
   style,
   ...props
@@ -62,7 +62,22 @@ export function AnimatedPressable({
   };
 
   const handlePressOut = (event: GestureResponderEvent) => {
-    animateTo(1);
+    Animated.sequence([
+      Animated.spring(scale, {
+        toValue: 1.04,
+        useNativeDriver: Platform.OS !== "web",
+        stiffness: 520,
+        damping: 16,
+        mass: 0.5,
+      }),
+      Animated.spring(scale, {
+        toValue: 1,
+        useNativeDriver: Platform.OS !== "web",
+        stiffness: 460,
+        damping: 14,
+        mass: 0.5,
+      }),
+    ]).start();
     onPressOut?.(event);
   };
 

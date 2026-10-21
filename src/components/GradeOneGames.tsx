@@ -1,6 +1,7 @@
 import * as Speech from "expo-speech";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { playFeedback } from "../utils/soundEffects";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import {
   ChoiceGame,
@@ -87,6 +88,7 @@ function OrderTilesGame({
   const tap = (k: number) => {
     if (done || used.includes(k)) return;
     if (tiles[k].t === current.tokens[placed]) {
+      playFeedback("success");
       const nextPlaced = placed + 1;
       setUsed((u) => [...u, k]);
       setPlaced(nextPlaced);
@@ -97,6 +99,7 @@ function OrderTilesGame({
         Speech.speak(current.speak, { rate: 0.8 });
       }
     } else {
+      playFeedback("error");
       setMistakes((m) => m + 1);
       setNote("Not that one. Try again!");
     }
@@ -422,6 +425,7 @@ export function ShopkeeperGame({ level, onExit, onPassed }: GameProps) {
   const check = () => {
     const ok = total === current.change;
     setChecked(ok);
+    playFeedback(ok ? "success" : "error");
     if (ok) setScore((s) => s + 1);
   };
   const next = () => {
@@ -538,6 +542,7 @@ export function NumberHopGame({ level, onExit, onPassed }: GameProps) {
   const check = () => {
     const ok = pos === current.target;
     setChecked(ok);
+    playFeedback(ok ? "success" : "error");
     if (ok) setScore((s) => s + 1);
   };
   const next = () => {
@@ -656,6 +661,7 @@ export function TrashSorterGame({ level, onExit, onPassed }: GameProps) {
     answered.current = true;
     animRef.current?.stop();
     const ok = binId === item.bin;
+    playFeedback(ok ? "success" : "error");
     if (ok) scoreRef.current += 1;
     const right = BINS.find((b) => b.id === item.bin)!.label;
     setMsg(ok ? "✅ Great sorting!" : binId === null ? `⏱️ Too slow! It goes in ${right}.` : `❌ It goes in ${right}.`);
@@ -885,11 +891,13 @@ export function ChoreQuestGame({ level, onExit, onPassed }: GameProps) {
     }
     if (time !== chore.time) {
       setMessage(`Hmm, when do you usually "${chore.text.toLowerCase()}"?`);
+      playFeedback("error");
       return false;
     }
     const nextPlaced = [...placed, chore.text];
     setPlaced(nextPlaced);
     setMessage("Right! Keep going.");
+    playFeedback("success");
     if (nextPlaced.length === chores.length) {
       setFinished(true);
       onPassed();

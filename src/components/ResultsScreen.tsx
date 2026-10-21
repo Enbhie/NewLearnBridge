@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useContext, useEffect } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { playFeedback } from "../utils/soundEffects";
+import { AppAppearanceContext } from "./CloudBackdrop";
 
 type QuestionResult = {
   label: string;
@@ -34,6 +35,7 @@ export default function ResultsScreen({
   onRetry,
   onNext,
 }: Props) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const allCorrect = total > 0 && correct === total;
   const stars = Math.max(1, Math.round((correct / Math.max(total, 1)) * 3));
 
@@ -42,7 +44,7 @@ export default function ResultsScreen({
   }, []);
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, darkMode && styles.darkScreen]}>
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.trophyCircle}>
@@ -53,29 +55,29 @@ export default function ResultsScreen({
           <Text style={styles.stars}>{"⭐".repeat(stars)}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Your Results</Text>
+        <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>Your Results</Text>
         <View style={styles.statRow}>
-          <View style={[styles.statChip, styles.correctChip]}>
+          <View style={[styles.statChip, darkMode ? styles.darkStatChip : styles.correctChip]}>
             <Text style={styles.statEmoji}>✅</Text>
-            <Text style={styles.statLabel}>Correct</Text>
-            <Text style={styles.statValue}>{correct}/{total}</Text>
+            <Text style={[styles.statLabel, darkMode && styles.darkMutedText]}>Correct</Text>
+            <Text style={[styles.statValue, darkMode && styles.darkText]}>{correct}/{total}</Text>
           </View>
-          <View style={[styles.statChip, styles.timeChip]}>
+          <View style={[styles.statChip, darkMode ? styles.darkStatChip : styles.timeChip]}>
             <Text style={styles.statEmoji}>⏱️</Text>
-            <Text style={styles.statLabel}>Time</Text>
-            <Text style={styles.statValue}>{timeLabel}</Text>
+            <Text style={[styles.statLabel, darkMode && styles.darkMutedText]}>Time</Text>
+            <Text style={[styles.statValue, darkMode && styles.darkText]}>{timeLabel}</Text>
           </View>
-          <View style={[styles.statChip, styles.xpChip]}>
+          <View style={[styles.statChip, darkMode ? styles.darkStatChip : styles.xpChip]}>
             <Text style={styles.statEmoji}>⭐</Text>
-            <Text style={styles.statLabel}>XP</Text>
-            <Text style={styles.statValue}>+{xpEarned}</Text>
+            <Text style={[styles.statLabel, darkMode && styles.darkMutedText]}>XP</Text>
+            <Text style={[styles.statValue, darkMode && styles.darkText]}>+{xpEarned}</Text>
           </View>
         </View>
 
-        <View style={styles.breakdownCard}>
+        <View style={[styles.breakdownCard, darkMode && styles.darkCard]}>
           {breakdown.map((result, index) => (
             <View key={`${result.label}-${index}`} style={[styles.breakdownRow, index > 0 && styles.divider]}>
-              <Text style={styles.breakdownLabel}>Q{index + 1}: {result.label}</Text>
+              <Text style={[styles.breakdownLabel, darkMode && styles.darkText]}>Q{index + 1}: {result.label}</Text>
               <Text style={[styles.answer, result.correct ? styles.correctText : styles.incorrectText]}>
                 {result.answer} {result.correct ? "✓" : "✕"}
               </Text>
@@ -84,20 +86,20 @@ export default function ResultsScreen({
         </View>
 
         {parentNote && (
-          <View style={styles.noteCard}>
-            <Text style={styles.noteTitle}>MOM'S NOTE</Text>
-            <Text style={styles.noteText}>"{parentNote}" 🥰</Text>
+          <View style={[styles.noteCard, darkMode && styles.darkCard]}>
+            <Text style={[styles.noteTitle, darkMode && styles.darkMutedText]}>MOM'S NOTE</Text>
+            <Text style={[styles.noteText, darkMode && styles.darkText]}>"{parentNote}" 🥰</Text>
           </View>
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, darkMode && styles.darkFooter]}>
         <Pressable
           accessibilityRole="button"
           onPress={onRetry}
           style={({ pressed }) => [styles.ghostButton, pressed && styles.pressed]}
         >
-          <Text style={styles.ghostText}>TRY AGAIN</Text>
+          <Text style={[styles.ghostText, darkMode && styles.darkText]}>TRY AGAIN</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -112,7 +114,7 @@ export default function ResultsScreen({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#FFFDF5" },
+  screen: { flex: 1, backgroundColor: "transparent" },
   body: { padding: 20, paddingBottom: 24 },
   hero: { backgroundColor: "#315C4A", borderRadius: 18, padding: 24, alignItems: "center" },
   trophyCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#FFFDF5", alignItems: "center", justifyContent: "center" },
@@ -145,4 +147,10 @@ const styles = StyleSheet.create({
   secondaryButton: { flex: 1, minHeight: 54, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: "#759B57" },
   secondaryText: { color: "#FFFDF5", fontSize: 13, fontWeight: "800", textAlign: "center" },
   pressed: { opacity: 0.7 },
+  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkStatChip: { backgroundColor: "#34425A" },
+  darkFooter: { borderTopColor: "#35445F" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
 });

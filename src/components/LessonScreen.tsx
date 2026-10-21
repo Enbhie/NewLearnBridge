@@ -1,7 +1,9 @@
+import { useContext } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import { gradeLabels } from "../data/offlineMissions";
 import { categoryMeta, lessonContent, type CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { AppAppearanceContext } from "./CloudBackdrop";
 
 type Props = {
   category: CategoryId;
@@ -10,12 +12,13 @@ type Props = {
 };
 
 export default function LessonScreen({ category, onBack, onContinue }: Props) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const content = lessonContent[category];
   const meta = categoryMeta[category];
   const gradeLabel = content.grade === "K" ? gradeLabels.K : gradeLabels[content.grade];
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, darkMode && styles.darkScreen]}>
       <View style={styles.topBar}>
         <Pressable
           accessibilityLabel="Back"
@@ -25,21 +28,21 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
         >
           <Text style={styles.backText}>Back</Text>
         </Pressable>
-        <View style={styles.progressTrack}>
+        <View style={[styles.progressTrack, darkMode && styles.darkTrack]}>
           <View style={styles.progressValue} />
         </View>
         <Text style={styles.hearts}>❤️❤️❤️</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        <View style={styles.banner}>
+        <View style={[styles.banner, darkMode && styles.darkBanner]}>
           <View style={styles.pill}>
-            <Text style={styles.pillText}>{gradeLabel} · Lesson 1</Text>
+            <Text style={[styles.pillText, darkMode && styles.darkText]}>{gradeLabel} · Lesson 1</Text>
           </View>
           <Text style={styles.bannerTitle}>{content.title}</Text>
         </View>
 
-        <View style={styles.storeStrip}>
+        <View style={[styles.storeStrip, darkMode && styles.darkCard]}>
           <View style={styles.storeTag}>
             <Text style={styles.storeTagText}>{content.theme}</Text>
           </View>
@@ -47,8 +50,8 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
             <View style={styles.storeStall}>
               <Text style={styles.storeEmoji}>{content.items[0]?.emoji ?? meta.emoji}</Text>
             </View>
-            <View style={styles.speechBubble}>
-              <Text style={styles.speechText}>{content.storyLine}</Text>
+            <View style={[styles.speechBubble, darkMode && styles.darkInnerCard]}>
+              <Text style={[styles.speechText, darkMode && styles.darkText]}>{content.storyLine}</Text>
             </View>
             <View style={styles.storeFriends}>
               <Text style={styles.owlFriend}>🦉</Text>
@@ -57,18 +60,18 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
           </View>
         </View>
 
-        <View style={styles.rememberCard}>
+        <View style={[styles.rememberCard, darkMode && styles.darkCard]}>
           <View style={styles.rememberHeader}>
             <Text style={styles.lightbulb}>💡</Text>
-            <Text style={styles.sectionTitle}>{content.rememberTitle}</Text>
+            <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>{content.rememberTitle}</Text>
           </View>
-          <Text style={styles.mutedText}>{content.rememberText}</Text>
-          <View style={styles.equationBox}>
-            <Text style={styles.equation}>{content.equation}</Text>
+          <Text style={[styles.mutedText, darkMode && styles.darkMutedText]}>{content.rememberText}</Text>
+          <View style={[styles.equationBox, darkMode && styles.darkInnerCard]}>
+            <Text style={[styles.equation, darkMode && styles.darkText]}>{content.equation}</Text>
           </View>
         </View>
 
-        <Text style={styles.itemsTitle}>Key ideas:</Text>
+        <Text style={[styles.itemsTitle, darkMode && styles.darkText]}>Key ideas:</Text>
         <View style={styles.itemsRow}>
           {content.items.map((item, index) => (
             <View
@@ -79,7 +82,7 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
               ]}
             >
               <Text style={styles.itemEmoji}>{item.emoji}</Text>
-              <Text style={styles.itemName}>{item.name}</Text>
+              <Text style={[styles.itemName, darkMode && styles.darkText]}>{item.name}</Text>
               {item.price !== undefined ? (
                 <Text style={styles.itemPrice}>₱{item.price}</Text>
               ) : null}
@@ -88,7 +91,7 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, darkMode && styles.darkFooter]}>
         <Pressable
           accessibilityRole="button"
           soundEffect="open"
@@ -103,7 +106,7 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F3FBFC" },
+  screen: { flex: 1, backgroundColor: "transparent" },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -236,4 +239,12 @@ const styles = StyleSheet.create({
   },
   continueText: { color: "#FFFFFF", fontSize: 17, fontWeight: "900" },
   pressed: { opacity: 0.7 },
+  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkBanner: { backgroundColor: "#425E76", borderBottomColor: "#9B8C65" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkInnerCard: { backgroundColor: "#29364D", borderColor: "#54647D" },
+  darkTrack: { backgroundColor: "#46546A" },
+  darkFooter: { backgroundColor: "#202B40", borderTopColor: "#35445F" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useContext, useEffect, useRef } from "react";
 import {
   Animated,
   SafeAreaView,
@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { playFeedback } from "../utils/soundEffects";
+import { AppAppearanceContext } from "./CloudBackdrop";
 
 type Props = {
   lessonTitle: string;
@@ -32,6 +33,7 @@ export default function LessonCompleteScreen({
   onNext,
   onMenu,
 }: Props) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const passed = total > 0 && correct === total;
   const percent = total > 0 ? Math.round((correct / total) * 100) : 0;
   const trophyScale = useRef(new Animated.Value(0.45)).current;
@@ -159,8 +161,13 @@ export default function LessonCompleteScreen({
   ]);
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={[styles.card, !passed && styles.failedCard]}>
+    <SafeAreaView style={[styles.screen, darkMode && styles.darkScreen]}>
+      <View style={[
+        styles.card,
+        darkMode && styles.darkCard,
+        !passed && styles.failedCard,
+        !passed && darkMode && styles.darkFailedCard,
+      ]}>
         <View style={styles.celebration} accessible={false}>
           {passed ? (
             <>
@@ -259,32 +266,32 @@ export default function LessonCompleteScreen({
         )}
 
         <View style={styles.statRow}>
-          <View style={[styles.statChip, styles.xpChip]}>
+          <View style={[styles.statChip, darkMode ? styles.darkStatChip : styles.xpChip]}>
             <Text style={styles.statEmoji}>⭐</Text>
-            <Text style={styles.statLabel}>XP</Text>
-            <Text style={styles.statValue}>+{passed ? xpEarned : 0}</Text>
+            <Text style={[styles.statLabel, darkMode && styles.darkMutedText]}>XP</Text>
+            <Text style={[styles.statValue, darkMode && styles.darkText]}>+{passed ? xpEarned : 0}</Text>
           </View>
-          <View style={[styles.statChip, styles.badgeChip]}>
+          <View style={[styles.statChip, darkMode ? styles.darkStatChip : styles.badgeChip]}>
             <Text style={styles.statEmoji}>🥉</Text>
-            <Text style={styles.statLabel}>Badges</Text>
-            <Text style={styles.statValue}>{passed ? newBadges : 0} New</Text>
+            <Text style={[styles.statLabel, darkMode && styles.darkMutedText]}>Badges</Text>
+            <Text style={[styles.statValue, darkMode && styles.darkText]}>{passed ? newBadges : 0} New</Text>
           </View>
-          <View style={[styles.statChip, styles.streakChip]}>
+          <View style={[styles.statChip, darkMode ? styles.darkStatChip : styles.streakChip]}>
             <Text style={styles.statEmoji}>🔥</Text>
-            <Text style={styles.statLabel}>Streak</Text>
-            <Text style={styles.statValue}>{passed ? streakDays : 0} Day</Text>
+            <Text style={[styles.statLabel, darkMode && styles.darkMutedText]}>Streak</Text>
+            <Text style={[styles.statValue, darkMode && styles.darkText]}>{passed ? streakDays : 0} Day</Text>
           </View>
         </View>
 
         {passed && (
-          <View style={styles.unlockCard}>
-            <Text style={styles.unlockTitle}>🔓 New lesson unlocked:</Text>
-            <Text style={styles.unlockText}>{unlockedLessonTitle}</Text>
+          <View style={[styles.unlockCard, darkMode && styles.darkStatChip]}>
+            <Text style={[styles.unlockTitle, darkMode && styles.darkText]}>🔓 New lesson unlocked:</Text>
+            <Text style={[styles.unlockText, darkMode && styles.darkMutedText]}>{unlockedLessonTitle}</Text>
           </View>
         )}
       </View>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, darkMode && styles.darkScreen]}>
         <Pressable
           accessibilityRole="button"
           onPress={onNext}
@@ -303,7 +310,7 @@ export default function LessonCompleteScreen({
           onPress={onMenu}
           style={({ pressed }) => [styles.ghostButton, pressed && styles.pressed]}
         >
-          <Text style={styles.ghostButtonText}>BACK TO MENU</Text>
+          <Text style={[styles.ghostButtonText, darkMode && styles.darkText]}>BACK TO MENU</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -311,7 +318,7 @@ export default function LessonCompleteScreen({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#FFFDF5", justifyContent: "space-between" },
+  screen: { flex: 1, backgroundColor: "transparent", justifyContent: "space-between" },
   card: {
     backgroundColor: "#315C4A",
     borderBottomLeftRadius: 18,
@@ -365,4 +372,10 @@ const styles = StyleSheet.create({
   ghostButton: { alignItems: "center", justifyContent: "center", minHeight: 48, marginTop: 10 },
   ghostButtonText: { color: "#4A2F22", fontSize: 14, fontWeight: "800" },
   pressed: { opacity: 0.7 },
+  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkCard: { backgroundColor: "#26374B" },
+  darkFailedCard: { backgroundColor: "#483745" },
+  darkStatChip: { backgroundColor: "#34425A" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
 });

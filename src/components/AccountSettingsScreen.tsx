@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import {
     Alert,
     Modal,
     Platform,
-    Pressable,
     ScrollView,
     StyleSheet,
     Switch,
@@ -12,6 +11,8 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { AppAppearanceContext } from "./CloudBackdrop";
 import { gradeLabels, type Grade } from "../data/offlineMissions";
 
 export type Difficulty = "easy" | "standard" | "challenge";
@@ -21,6 +22,7 @@ export type AccountPreferences = {
   notificationsEnabled: boolean;
   offlineMode: boolean;
   privacyMode: boolean;
+  darkMode: boolean;
   screenTimeLimitMinutes: number;
 };
 
@@ -107,6 +109,7 @@ export default function AccountSettingsScreen({
   onClearProgress,
   onDeleteAccount,
 }: Props) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const [showAddProfile, setShowAddProfile] = useState(false);
   const [newName, setNewName] = useState("");
   const [month, setMonth] = useState("");
@@ -221,19 +224,52 @@ export default function AccountSettingsScreen({
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, darkMode && styles.darkSafeArea]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Pressable
           accessibilityRole="button"
           onPress={onBack}
-          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.backButton,
+            darkMode && styles.darkBackButton,
+            pressed && styles.pressed,
+          ]}
         >
-          <Text style={styles.backText}>Back</Text>
+          <Text style={[styles.backText, darkMode && styles.darkBackText]}>← Back</Text>
         </Pressable>
-        <Text style={styles.title}>Account Settings</Text>
+        <View style={[styles.pageHero, darkMode && styles.darkPageHero]}>
+          <View style={[styles.heroIcon, darkMode && styles.darkHeroIcon]}>
+            <Text style={styles.heroIconText}>⚙️</Text>
+          </View>
+          <View style={styles.heroCopy}>
+            <Text style={[styles.title, darkMode && styles.darkText]}>Account Settings</Text>
+            <Text style={[styles.heroSubtitle, darkMode && styles.darkHeroSubtitle]}>
+              Make LearnBridge feel just right for your family.
+            </Text>
+          </View>
+        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ACCOUNT</Text>
+        <View style={[styles.section, darkMode && styles.darkSection]}>
+          <Text style={styles.sectionTitle}>🌙  APPEARANCE</Text>
+          <View style={styles.preferenceRow}>
+            <View style={styles.preferenceCopy}>
+              <Text style={styles.bodyLabel}>Dark mode</Text>
+              <Text style={styles.hint}>
+                Switch LearnBridge to a starry night sky.
+              </Text>
+            </View>
+            <Switch
+              accessibilityLabel="Enable dark mode"
+              value={preferences.darkMode}
+              onValueChange={(value) => updatePreference("darkMode", value)}
+              trackColor={{ false: "#B9B2A8", true: "#8A78D6" }}
+              thumbColor={preferences.darkMode ? "#F2E9C8" : undefined}
+            />
+          </View>
+        </View>
+
+        <View style={[styles.section, darkMode && styles.darkSection]}>
+          <Text style={styles.sectionTitle}>👨‍👩‍👧  ACCOUNT</Text>
           <Text style={styles.bodyLabel}>Parent / guardian email</Text>
           <Text style={styles.valueText}>{email || "Not available"}</Text>
           <Pressable
@@ -249,7 +285,7 @@ export default function AccountSettingsScreen({
           <Text style={styles.hint}>A link sent to your email verifies the change.</Text>
         </View>
 
-        <View style={styles.section}>
+        <View style={[styles.section, darkMode && styles.darkSection]}>
           <Text style={styles.sectionTitle}>CHILD PROFILES</Text>
           {profiles.map((profile) => {
             const isActive = profile.id === activeProfileId;
@@ -399,8 +435,8 @@ export default function AccountSettingsScreen({
           )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>LEARNING</Text>
+        <View style={[styles.section, darkMode && styles.darkSection]}>
+          <Text style={styles.sectionTitle}>📚  LEARNING</Text>
           <Text style={styles.bodyLabel}>Difficulty</Text>
           <View style={styles.segmentRow}>
             {difficulties.map(({ value, label }) => {
@@ -479,8 +515,8 @@ export default function AccountSettingsScreen({
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>DATA & PRIVACY</Text>
+        <View style={[styles.section, darkMode && styles.darkSection]}>
+          <Text style={styles.sectionTitle}>🛡️  DATA & PRIVACY</Text>
           <View style={styles.preferenceRow}>
             <View style={styles.preferenceCopy}>
               <Text style={styles.bodyLabel}>Privacy mode</Text>
@@ -575,12 +611,23 @@ export default function AccountSettingsScreen({
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F1F4EF" },
-  content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 },
-  backButton: { alignSelf: "flex-start", minHeight: 42, borderRadius: 8, backgroundColor: "#C62828", alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
-  backText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
-  title: { color: "#26352B", fontSize: 30, fontWeight: "900", marginBottom: 14 },
-  section: { backgroundColor: "#FFFFFF", borderColor: "#D8E1D7", borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 12 },
+  safeArea: { flex: 1, backgroundColor: "#EDF3F2" },
+  darkSafeArea: { backgroundColor: "#101936" },
+  content: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 44 },
+  backButton: { alignSelf: "flex-start", minHeight: 42, borderRadius: 14, backgroundColor: "#DCEDE8", alignItems: "center", justifyContent: "center", paddingHorizontal: 16, marginBottom: 12 },
+  darkBackButton: { backgroundColor: "#253149", borderWidth: 1, borderColor: "#465671" },
+  backText: { color: "#28543A", fontSize: 15, fontWeight: "800" },
+  darkBackText: { color: "#E4EAF3" },
+  pageHero: { alignItems: "center", flexDirection: "row", gap: 14, backgroundColor: "#FFFFFF", borderColor: "#D8E5E1", borderWidth: 1, borderRadius: 22, padding: 18, marginBottom: 16 },
+  darkPageHero: { backgroundColor: "#253149", borderColor: "#465671" },
+  heroIcon: { width: 58, height: 58, alignItems: "center", justifyContent: "center", borderRadius: 20, backgroundColor: "#E4F3EE" },
+  darkHeroIcon: { backgroundColor: "#303D55" },
+  heroIconText: { fontSize: 30 },
+  heroCopy: { flex: 1 },
+  title: { color: "#26352B", fontSize: 25, lineHeight: 31, fontWeight: "900" },
+  heroSubtitle: { color: "#52665D", fontSize: 14, lineHeight: 20, marginTop: 4 },
+  darkHeroSubtitle: { color: "#B9C5D8" },
+  section: { backgroundColor: "#FFFFFF", borderColor: "#D8E5E1", borderWidth: 1, borderRadius: 20, padding: 18, marginBottom: 14, shadowColor: "#25443A", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 },
   sectionTitle: { color: "#28543A", fontSize: 13, fontWeight: "900", marginBottom: 14 },
   bodyLabel: { color: "#26352B", fontSize: 15, lineHeight: 21, fontWeight: "800" },
   valueText: { color: "#26352B", fontSize: 16, lineHeight: 23, marginTop: 5, marginBottom: 14 },
@@ -643,4 +690,7 @@ const styles = StyleSheet.create({
   deleteConfirmButton: { minHeight: 44, backgroundColor: "#8C2D24", borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   deleteConfirmText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
   pressed: { opacity: 0.7 },
+  darkSection: { backgroundColor: "#DCE3EC", borderColor: "#BBC7D5" },
+  darkText: { color: "#F3F4FF" },
+  darkHint: { color: "#C4CBE0" },
 });

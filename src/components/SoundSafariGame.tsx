@@ -1,8 +1,10 @@
 import * as Speech from "expo-speech";
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { playFeedback } from "../utils/soundEffects";
+import { AppAppearanceContext } from "./CloudBackdrop";
 
 type Word = { emoji: string; word: string };
 type Tile = Word & { letter: string };
@@ -60,6 +62,7 @@ export default function SoundSafariGame({
   onExit: () => void;
   onPassed: () => void;
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const rounds = useMemo(() => buildRounds(level), [level]);
   const [round, setRound] = useState(0);
   const [picked, setPicked] = useState<number[]>([]);
@@ -95,6 +98,7 @@ export default function SoundSafariGame({
       (tile, i) => (tile.letter === current.letter) === picked.includes(i)
     );
     setChecked(correct);
+    playFeedback(correct ? "success" : "error");
     if (correct) setScore((s) => s + 1);
   };
 
@@ -112,11 +116,11 @@ export default function SoundSafariGame({
   if (finished) {
     const passed = score >= PASS_SCORE;
     return (
-      <SafeAreaView style={styles.page}>
+      <SafeAreaView style={[styles.page, darkMode && styles.darkPage]}>
         <View style={styles.center}>
           <Text style={styles.bigEmoji}>{passed ? "🌟" : "💪"}</Text>
-          <Text style={styles.title}>{passed ? "Great listening!" : "Try again!"}</Text>
-          <Text style={styles.sub}>
+          <Text style={[styles.title, darkMode && styles.darkText]}>{passed ? "Great listening!" : "Try again!"}</Text>
+          <Text style={[styles.sub, darkMode && styles.darkMutedText]}>
             You got {score} of {ROUNDS} right.
             {passed ? " You earned a star!" : " Get 2 right to earn a star."}
           </Text>
@@ -129,18 +133,18 @@ export default function SoundSafariGame({
   }
 
   return (
-    <SafeAreaView style={styles.page}>
+    <SafeAreaView style={[styles.page, darkMode && styles.darkPage]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Pressable onPress={onExit} style={styles.backBtn}>
           <Text style={styles.backBtnText}>Back</Text>
         </Pressable>
 
-        <View style={styles.hero}>
-          <Text style={styles.meta}>
+        <View style={[styles.hero, darkMode && styles.darkCard]}>
+          <Text style={[styles.meta, darkMode && styles.darkMutedText]}>
             Round {round + 1} of {ROUNDS} · {LEVEL_LABELS[level - 1]}
           </Text>
-          <Text style={styles.title}>🚐 Sound Safari</Text>
-          <Text style={styles.sub}>Tap every picture that starts with this sound!</Text>
+          <Text style={[styles.title, darkMode && styles.darkText]}>🚐 Sound Safari</Text>
+          <Text style={[styles.sub, darkMode && styles.darkMutedText]}>Tap every picture that starts with this sound!</Text>
           <Text style={styles.letter}>{current.letter}</Text>
           <Pressable onPress={speakPrompt} style={styles.replayBtn}>
             <Text style={styles.replayText}>🔊 Hear it again</Text>
@@ -157,13 +161,17 @@ export default function SoundSafariGame({
                 onPress={() => toggle(i)}
                 style={[
                   styles.tile,
+                  darkMode && styles.darkTile,
                   isPicked && styles.tilePicked,
+                  darkMode && isPicked && styles.darkTilePicked,
                   checked !== null && isTarget && styles.tileCorrect,
+                  darkMode && checked !== null && isTarget && styles.darkTileCorrect,
                   checked !== null && isPicked && !isTarget && styles.tileWrong,
+                  darkMode && checked !== null && isPicked && !isTarget && styles.darkTileWrong,
                 ]}
               >
                 <Text style={styles.tileEmoji}>{tile.emoji}</Text>
-                {checked !== null ? <Text style={styles.tileWord}>{tile.word}</Text> : null}
+                {checked !== null ? <Text style={[styles.tileWord, darkMode && styles.darkText]}>{tile.word}</Text> : null}
               </Pressable>
             );
           })}
@@ -195,7 +203,7 @@ export default function SoundSafariGame({
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#F2FBFD" },
+  page: { flex: 1, backgroundColor: "transparent" },
   scroll: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 40 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   backBtn: { alignSelf: "flex-start", backgroundColor: "#C62828", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginBottom: 10 },
@@ -221,4 +229,12 @@ const styles = StyleSheet.create({
   feedback: { fontSize: 17, fontWeight: "900", textAlign: "center", marginVertical: 8 },
   good: { color: "#28543A" },
   bad: { color: "#9C3E32" },
+  darkPage: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkTile: { backgroundColor: "#29364D", borderColor: "#465671" },
+  darkTilePicked: { backgroundColor: "#394C68", borderColor: "#7897B0" },
+  darkTileCorrect: { backgroundColor: "#354C49", borderColor: "#718D7B" },
+  darkTileWrong: { backgroundColor: "#51404B", borderColor: "#997183" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
 });

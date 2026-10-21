@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { Difficulty } from "./AccountSettingsScreen";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
@@ -10,6 +10,7 @@ import {
   type CategoryId,
 } from "../data/learningContent";
 import { playFeedback } from "../utils/soundEffects";
+import { AppAppearanceContext } from "./CloudBackdrop";
 
 type Question = {
   id: string;
@@ -34,6 +35,7 @@ type Props = {
 };
 
 export default function QuizScreen({ category, difficulty, onBack, onFinish }: Props) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
@@ -106,7 +108,7 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, darkMode && styles.darkScreen]}>
       <View style={styles.topBar}>
         <Pressable
           accessibilityLabel="Back"
@@ -117,33 +119,33 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
           <Text style={styles.backText}>Back</Text>
         </Pressable>
         <View style={styles.counterPill}>
-          <Text style={styles.counterText}>
+          <Text style={[styles.counterText, darkMode && styles.darkText]}>
             Question {index + 1} of {questions.length}
           </Text>
         </View>
         <Text style={styles.hearts}>❤️❤️❤️</Text>
       </View>
 
-      <View style={styles.progressTrack}>
+      <View style={[styles.progressTrack, darkMode && styles.darkTrack]}>
         <View style={styles.progressValue} />
       </View>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        <View style={styles.questionCard}>
+        <View style={[styles.questionCard, darkMode && styles.darkCard]}>
           <View style={styles.quizIllustration}>
             <Text style={styles.quizOwl}>{illustration[0]}</Text>
             <Text style={styles.quizShop}>{illustration[1]}</Text>
             <Text style={styles.quizCoin}>{illustration[2]}</Text>
           </View>
-          <Text style={styles.questionText}>
+          <Text style={[styles.questionText, darkMode && styles.darkText]}>
             <Text style={styles.character}>{question.character}</Text> {question.prompt}
           </Text>
-          <View style={styles.equationBox}>
-            <Text style={styles.equation}>{question.equation}</Text>
+          <View style={[styles.equationBox, darkMode && styles.darkCard]}>
+            <Text style={[styles.equation, darkMode && styles.darkText]}>{question.equation}</Text>
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Choose the correct answer:</Text>
+        <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>Choose the correct answer:</Text>
         <View style={styles.optionsGrid}>
           {question.options.map((option) => (
             <Pressable
@@ -155,22 +157,27 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
               onPress={() => setSelected(option)}
               style={({ pressed }) => [
                 getOptionStyle(option),
+                darkMode && (selected === option ? styles.darkOptionSelected : styles.darkOption),
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.optionText}>{option}</Text>
+              <Text style={[styles.optionText, darkMode && styles.darkText]}>{option}</Text>
             </Pressable>
           ))}
         </View>
 
         {!checked ? (
-          <View style={styles.hintCard}>
-            <Text style={styles.hintTitle}>💭 Hint</Text>
-            <Text style={styles.hintText}>{question.hint}</Text>
+          <View style={[styles.hintCard, darkMode && styles.darkHintCard]}>
+            <Text style={[styles.hintTitle, darkMode && styles.darkText]}>💭 Hint</Text>
+            <Text style={[styles.hintText, darkMode && styles.darkMutedText]}>{question.hint}</Text>
           </View>
         ) : (
-          <View style={[styles.hintCard, isCorrect ? styles.correctFeedback : styles.incorrectFeedback]}>
-            <Text style={styles.feedbackText}>
+          <View style={[
+            styles.hintCard,
+            darkMode && styles.darkHintCard,
+            isCorrect ? styles.correctFeedback : styles.incorrectFeedback,
+          ]}>
+            <Text style={[styles.feedbackText, darkMode && styles.darkText]}>
               {isCorrect
                 ? "Tama! Great job!"
                 : `Not quite - the answer is ${category === "math" ? `₱${question.correctAnswer}` : question.correctAnswer}`}
@@ -179,7 +186,7 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, darkMode && styles.darkFooter]}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: !selected && !checked }}
@@ -201,7 +208,7 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F3FBFC" },
+  screen: { flex: 1, backgroundColor: "transparent" },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -325,4 +332,13 @@ const styles = StyleSheet.create({
   disabledButton: { backgroundColor: "#A4BAC0" },
   primaryButtonText: { color: "#FFFFFF", fontSize: 17, fontWeight: "900" },
   pressed: { opacity: 0.7 },
+  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
+  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkOption: { backgroundColor: "#29364D", borderColor: "#54647D" },
+  darkOptionSelected: { backgroundColor: "#394C68", borderColor: "#7897B0" },
+  darkHintCard: { backgroundColor: "#29384C", borderColor: "#50617A" },
+  darkTrack: { backgroundColor: "#46546A" },
+  darkFooter: { backgroundColor: "#202B40", borderTopColor: "#35445F" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
 });
