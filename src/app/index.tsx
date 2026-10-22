@@ -1461,7 +1461,7 @@ function MenuScreen({
               </View>
             ) : grade === "K" ? (
               <ActionButton onPress={() => setScreen("kinder-lessons")} variant="secondary">
-                OPEN KINDER CURRICULUM
+                OPEN KINDERGARTEN ONLINE LESSONS
               </ActionButton>
                           ) : grade === "1" ? (
               <ActionButton onPress={() => setScreen("grade1-lessons")} variant="secondary">
@@ -1496,7 +1496,7 @@ function MenuScreen({
             </View>
             {grade === "K" ? (
               <ActionButton onPress={() => setScreen("kinder-lessons")} variant="secondary">
-                OPEN KINDER CURRICULUM
+                OPEN KINDERGARTEN ONLINE LESSONS
               </ActionButton>
             ) : grade === "1" ? (
               <ActionButton onPress={() => setScreen("grade1-lessons")} variant="secondary">
@@ -3116,6 +3116,7 @@ export default function App() {
   if (screen === "kinder-lessons") {
     return (
       <KindergartenLessonsScreen
+        difficulty={preferences.difficulty}
         onBack={() => {
           setCurriculumCategory(null);
           setScreen("menu");
@@ -3131,6 +3132,7 @@ export default function App() {
   if (screen === "grade1-lessons") {
     return (
       <GradeOneLessonsScreen
+        difficulty={preferences.difficulty}
         onBack={() => {
           setCurriculumCategory(null);
           setScreen("menu");

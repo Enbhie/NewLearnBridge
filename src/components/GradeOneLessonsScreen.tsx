@@ -4,7 +4,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import type { CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { AppAppearanceContext } from "./CloudBackdrop";
-import LessonInstructionModal from "./LessonInstructionModal";
 import {
   BlendTrainGame,
   ChooseKindlyGame,
@@ -19,86 +18,338 @@ import {
 } from "./GradeOneGames";
 
 // ---------- Curriculum data ----------
+// Grade 1: three subjects, five lessons each, one minigame per lesson.
 
-type Game = {
-  id: string;
-  title: string;
-  emoji: string;
-  blurb: string;
-};
-
-type Unit = {
-  id: string;
-  number: number;
-  title: string;
-  emoji: string;
-  focus: string;
-  music: CategoryId;
-  games: Game[];
-};
-
-const LEVELS = [1, 2, 3] as const;
-const LEVEL_LABELS = ["Easy", "Standard", "Challenge"];
-
-export const gradeOneUnits: Unit[] = [
+export const gradeOneSubjects: Subject[] = [
   {
-    id: "u1",
-    number: 1,
-    title: "Reading and Literacy",
+    id: "reading",
+    title: "Reading Comprehension",
     emoji: "📖",
-    focus: "Letter-sound blending, sight words, reading short sentences and stories",
     music: "reading",
-    games: [
-      { id: "blend-train", title: "Blend Train", emoji: "🚂", blurb: "Each train car holds a sound. Tap them in order to blend a word and move the train." },
-      { id: "word-hunt", title: "Word Hunt", emoji: "🔎", blurb: "Find the hidden sight words in a busy town scene." },
+    lessons: [
+      {
+        id: "letter-sounds",
+        title: "Letter Sounds",
+        emoji: "🔤",
+        gameName: "Blend Train",
+        blurb: "Tap the sounds in order to build a word.",
+        learn:
+          "Every letter makes a sound. When we blend the sounds together, we can read a word. Say each sound, then slide them together: c, a, t makes cat!",
+        game: {
+          type: "order",
+          rounds: [
+            { art: "🐱", prompt: "Tap the sounds in order to build the word.", items: ["c", "a", "t"] },
+            { art: "🐶", prompt: "Tap the sounds in order to build the word.", items: ["d", "o", "g"] },
+            { art: "☀️", prompt: "Tap the sounds in order to build the word.", items: ["s", "u", "n"] },
+            { art: "🐷", prompt: "Tap the sounds in order to build the word.", items: ["p", "i", "g"] },
+            { art: "🎩", prompt: "Tap the sounds in order to build the word.", items: ["h", "a", "t"] },
+          ],
+        },
+      },
+      {
+        id: "sight-words",
+        title: "Sight Words",
+        emoji: "👀",
+        gameName: "Word Hunt",
+        blurb: "Find the sight word hiding among look-alikes.",
+        learn:
+          "Sight words show up in almost every story, like the, and, was, and you. When you know them by sight, reading gets faster.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: "🔎", q: "Which word says was?", correct: "was", wrong: ["saw", "war", "wax"] },
+            { art: "🔎", q: "Which word says said?", correct: "said", wrong: ["sad", "sit", "say"] },
+            { art: "🔎", q: "Which word says and?", correct: "and", wrong: ["end", "an", "hand"] },
+            { art: "🔎", q: "Which word says you?", correct: "you", wrong: ["your", "yet", "toy"] },
+            { art: "🔎", q: "Which word says the?", correct: "the", wrong: ["they", "then", "thin"] },
+          ],
+        },
+      },
+      {
+        id: "sentences",
+        title: "Build a Sentence",
+        emoji: "🧱",
+        gameName: "Sentence Builder",
+        blurb: "Put the word tiles in order to make a sentence.",
+        learn:
+          "A sentence tells a whole idea. It starts with a capital letter, and it makes sense only when the words are in the right order.",
+        game: {
+          type: "order",
+          rounds: [
+            { art: "📚", prompt: "Tap the words in order to make a sentence.", items: ["I", "like", "to", "read"] },
+            { art: "🐈", prompt: "Tap the words in order to make a sentence.", items: ["The", "cat", "is", "big"] },
+            { art: "🏫", prompt: "Tap the words in order to make a sentence.", items: ["We", "go", "to", "school"] },
+            { art: "🐕", prompt: "Tap the words in order to make a sentence.", items: ["My", "dog", "can", "run"] },
+            { art: "🧢", prompt: "Tap the words in order to make a sentence.", items: ["She", "has", "a", "red", "hat"] },
+          ],
+        },
+      },
+      {
+        id: "picture-words",
+        title: "Picture Words",
+        emoji: "🖼️",
+        gameName: "Picture Match",
+        blurb: "Match each picture to its word.",
+        learn:
+          "Words name the things around us. Look closely at the picture, then pick the word that matches it.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: "🍎", q: "What is this?", correct: "apple", wrong: ["book", "moon", "shoe"] },
+            { art: "🚌", q: "What is this?", correct: "bus", wrong: ["bat", "bed", "box"] },
+            { art: "🌳", q: "What is this?", correct: "tree", wrong: ["tray", "star", "sun"] },
+            { art: "🐟", q: "What is this?", correct: "fish", wrong: ["frog", "fan", "fork"] },
+            { art: "🏠", q: "What is this?", correct: "house", wrong: ["horse", "hand", "hat"] },
+          ],
+        },
+      },
+      {
+        id: "story-time",
+        title: "Story Time",
+        emoji: "📚",
+        gameName: "Story Quiz",
+        blurb: "Read a short story, then answer questions about it.",
+        learn:
+          "Good readers think about who, what, and why while they read. Read the story first, then answer the questions about it.",
+        game: {
+          type: "choice",
+          passage:
+            "Mia has two mangoes. Her friend Ben has none. Mia gives one mango to Ben. Ben says, Thank you! They eat the mangoes together.",
+          rounds: [
+            { art: "🥭", q: "Who has two mangoes at the start?", correct: "Mia", wrong: ["Ben", "Mom"] },
+            { art: "🥭", q: "What does Mia give to Ben?", correct: "A mango", wrong: ["A book", "A ball"] },
+            { art: "💬", q: "What does Ben say?", correct: "Thank you!", wrong: ["Goodbye!", "No!"] },
+            { art: "🥭", q: "How many mangoes does Mia have after she gives one away?", correct: "One", wrong: ["Two", "Three"] },
+            { art: "💛", q: "What kind thing did Mia do?", correct: "She shared", wrong: ["She hid it", "She ate it all"] },
+          ],
+        },
+      },
     ],
   },
   {
-    id: "u2",
-    number: 2,
-    title: "Language",
-    emoji: "🗣️",
-    focus: "Listening and speaking, vocabulary, building and writing simple sentences",
-    music: "reading",
-    games: [
-      { id: "sentence-builder", title: "Sentence Builder", emoji: "🧱", blurb: "Arrange word tiles into a sentence, with audio read-back and a picture hint." },
-      { id: "story-time", title: "Story Time", emoji: "📚", blurb: "Listen to a short story, then answer picture-based questions." },
-    ],
-  },
-  {
-    id: "u3",
-    number: 3,
-    title: "Mathematics",
-    emoji: "🧮",
-    focus: "Numbers to 100, tens and ones, adding and subtracting within 20, shapes, telling time",
+    id: "math",
+    title: "Math",
+    emoji: "🔢",
     music: "math",
-    games: [
-      { id: "shopkeeper", title: "Shopkeeper: Change Challenge", emoji: "🏪", blurb: "Run a corner store, take payment, and count out the change with coins and bills." },
-      { id: "number-hop", title: "Number Hop", emoji: "🐸", blurb: "A character hops along a number line to solve problems." },
+    lessons: [
+      {
+        id: "numbers-to-100",
+        title: "Numbers to 100",
+        emoji: "💯",
+        gameName: "Number Hop",
+        blurb: "Count, compare, and build numbers on the number line.",
+        learn:
+          "Count forward and backward to 100. Numbers are made of tens and ones: in 34, the 3 means 3 tens and the 4 means 4 ones.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: "🐸", q: "9, 10, 11, __ What number comes next?", correct: "12", wrong: ["13", "10"] },
+            { art: "🐸", q: "Count backward: 30, 29, __", correct: "28", wrong: ["31", "27"] },
+            { art: `${rep("🟦", 4)}  ${rep("🟨", 2)}`, q: "4 tens and 2 ones make what number?", correct: "42", wrong: ["24", "6"] },
+            { art: "🐸", q: "Which number is greater?", correct: "68", wrong: ["58", "46"] },
+            { art: "🐸", q: "What number comes just before 100?", correct: "99", wrong: ["98", "101"] },
+          ],
+        },
+      },
+      {
+        id: "add-subtract-within-20",
+        title: "Add and Subtract Within 20",
+        emoji: "➕",
+        gameName: "Number Hop: Add and Take Away",
+        blurb: "Use small jumps to add and subtract within 20.",
+        learn:
+          "Addition joins groups together, and subtraction takes some away. Count on to add and count back to subtract, keeping the answer within 20.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: `${rep("🥭", 6)}  ➕  ${rep("🥭", 3)}`, q: "What is 6 + 3?", correct: "9", wrong: ["8", "10"] },
+            { art: `${rep("🍎", 12)}  ➖  ${rep("🍎", 4)}`, q: "What is 12 - 4?", correct: "8", wrong: ["7", "9"] },
+            { q: "What is 8 + 7?", correct: "15", wrong: ["14", "16"] },
+            { q: "What is 17 - 9?", correct: "8", wrong: ["7", "9"] },
+            { art: "⚽", q: "You have 10 balls and get 5 more. How many now?", correct: "15", wrong: ["14", "16"] },
+          ],
+        },
+      },
+      {
+        id: "shapes",
+        title: "Shapes Around Us",
+        emoji: "🔷",
+        gameName: "Shape Match",
+        blurb: "Find circles, squares, triangles, and rectangles.",
+        learn:
+          "A circle is round. A triangle has 3 sides. A square has 4 equal sides, and a rectangle has 4 sides with opposite sides equal.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: "🍕", q: "What shape is a slice of pizza?", correct: "Triangle", wrong: ["Circle", "Square"] },
+            { art: "⚽", q: "What shape is a ball?", correct: "Circle", wrong: ["Rectangle", "Triangle"] },
+            { art: "🪟", q: "A window has 4 equal sides. What shape is it?", correct: "Square", wrong: ["Circle", "Triangle"] },
+            { art: "📕", q: "What shape is a book cover?", correct: "Rectangle", wrong: ["Circle", "Triangle"] },
+            { art: "🔺", q: "How many sides does a triangle have?", correct: "3", wrong: ["4", "5"] },
+          ],
+        },
+      },
+      {
+        id: "telling-time",
+        title: "Telling Time",
+        emoji: "🕒",
+        gameName: "Clock Match",
+        blurb: "Read the hour and half-hour on a clock.",
+        learn:
+          "The short hand shows the hour and the long hand shows the minutes. When the long hand points to 12, it is an o'clock time; when it points to 6, it is half past the hour.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: "🕒", q: "The short hand points to 3 and the long hand to 12. What time is it?", correct: "3 o'clock", wrong: ["12 o'clock", "6 o'clock"] },
+            { art: "🕕", q: "The short hand points to 6 and the long hand to 12. What time is it?", correct: "6 o'clock", wrong: ["12 o'clock", "3 o'clock"] },
+            { art: "🕞", q: "The short hand is between 3 and 4; the long hand points to 6. What time is it?", correct: "Half past 3", wrong: ["Half past 6", "3 o'clock"] },
+            { art: "🕘", q: "The long hand points to 12. Is it an o'clock or half-past time?", correct: "O'clock", wrong: ["Half past", "Quarter past"] },
+            { art: "🕡", q: "The long hand points to 6. Is it an o'clock or half-past time?", correct: "Half past", wrong: ["O'clock", "Quarter past"] },
+          ],
+        },
+      },
+      {
+        id: "money",
+        title: "Coins and Change",
+        emoji: "🪙",
+        gameName: "Shopkeeper: Change Challenge",
+        blurb: "Run a corner store and give the right change.",
+        learn:
+          "Coins and bills have different values. Add money to find the total cost, and subtract the price from the amount paid to find the change.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: "🍬", q: "Candy costs ₱3. You pay ₱5. How much change?", correct: "₱2", wrong: ["₱1", "₱3"] },
+            { art: "✏️", q: "A pencil costs ₱6. You pay ₱10. How much change?", correct: "₱4", wrong: ["₱3", "₱5"] },
+            { art: "🍞", q: "Bread costs ₱7. You pay ₱10. How much change?", correct: "₱3", wrong: ["₱2", "₱4"] },
+            { art: "⚽", q: "A ball costs ₱12. You pay ₱20. How much change?", correct: "₱8", wrong: ["₱6", "₱10"] },
+            { art: "🧸", q: "A toy costs ₱15. You pay ₱20. How much change?", correct: "₱5", wrong: ["₱4", "₱10"] },
+          ],
+        },
+      },
     ],
   },
   {
-    id: "u4",
-    number: 4,
-    title: "Community and Country",
-    emoji: "🏘️",
-    focus: "Family and community helpers, our community, weather, plants and animals, waste segregation",
+    id: "science",
+    title: "Science",
+    emoji: "🌱",
     music: "science",
-    games: [
-      { id: "trash-sorter", title: "Trash Sorter", emoji: "🗑️", blurb: "Drop items into the right bins on a conveyor that speeds up." },
-      { id: "community-builder", title: "Community Builder", emoji: "🏗️", blurb: "Build a small town by matching helpers and places to situations." },
-    ],
-  },
-  {
-    id: "u5",
-    number: 5,
-    title: "Good Manners and Real-Life Skills",
-    emoji: "🤝",
-    focus: "Respect and manners, honesty, chores, coins and bills, buying and getting change, daily schedule",
-    music: "science",
-    games: [
-      { id: "choose-kindly", title: "Choose Kindly", emoji: "💛", blurb: "Short branching stories where you choose what to do and see a gentle consequence." },
-      { id: "chore-quest", title: "Chore Quest", emoji: "🧹", blurb: "Order a daily schedule and match chores to the time of day." },
+    lessons: [
+      {
+        id: "weather",
+        title: "Weather",
+        emoji: "🌦️",
+        gameName: "Weather Match",
+        blurb: "Pick the right thing for each kind of weather.",
+        learn:
+          "Weather tells us if it is sunny, rainy, or windy. We choose what to wear and what to bring based on the weather.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: "☔", q: "It is raining. What should you bring?", correct: "Umbrella", wrong: ["Sunglasses", "Kite"] },
+            { art: "🥵", q: "The sun is very hot. What helps you?", correct: "A hat", wrong: ["A raincoat", "Boots"] },
+            { art: "💨", q: "Strong wind is blowing. What can fly high?", correct: "A kite", wrong: ["A rock", "A shoe"] },
+            { art: "🌧️", q: "Which is a rainy day?", correct: "🌧️", wrong: ["☀️", "🌈"] },
+            { art: "☀️", q: "Which is a sunny day?", correct: "☀️", wrong: ["🌧️", "⛈️"] },
+          ],
+        },
+      },
+      {
+        id: "plants",
+        title: "How Plants Grow",
+        emoji: "🌱",
+        gameName: "Grow the Plant",
+        blurb: "Put the steps of plant growth in order.",
+        learn:
+          "Plants start as seeds. With water and sunlight, a seed grows into a sprout, then a plant, then a flower.",
+        game: {
+          type: "order",
+          rounds: [
+            {
+              art: "🌰",
+              prompt: "Tap the stages in order, from first to last.",
+              items: ["Seed", "Sprout", "Plant", "Flower"],
+            },
+            {
+              art: "🌻",
+              prompt: "Tap the plant parts from the ground up.",
+              items: ["Roots", "Stem", "Leaves", "Flower"],
+            },
+            {
+              art: "🪴",
+              prompt: "Tap the steps to plant a seed in order.",
+              items: ["Dig a hole", "Put in the seed", "Cover with soil", "Add water"],
+            },
+          ],
+        },
+      },
+      {
+        id: "animals",
+        title: "Animal Friends",
+        emoji: "🐄",
+        gameName: "Animal Match",
+        blurb: "Learn where animals live and what they give us.",
+        learn:
+          "Animals live in different places and some give us useful things, like eggs from hens and honey from bees.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: "🐄", q: "Where does a cow live?", correct: "Farm", wrong: ["Ocean", "Tree"] },
+            { art: "🐟", q: "Where does a fish live?", correct: "Water", wrong: ["Farm", "Nest"] },
+            { art: "🐦", q: "Where does a bird make its home?", correct: "Nest", wrong: ["Water", "Barn"] },
+            { art: "🐝", q: "What does a bee make?", correct: "Honey", wrong: ["Milk", "Eggs"] },
+            { art: "🐔", q: "What does a hen give us?", correct: "Eggs", wrong: ["Honey", "Milk"] },
+          ],
+        },
+      },
+      {
+        id: "waste",
+        title: "Sorting Trash",
+        emoji: "♻️",
+        gameName: "Trash Sorter",
+        blurb: "Drop each item into the right bin.",
+        learn:
+          "Food and leaves rot and can become compost. Bottles, cans, and paper can be recycled and used again.",
+        game: {
+          type: "choice",
+          rounds: [
+            { art: "🍌", q: "Where does a banana peel go?", correct: "Compost bin", wrong: ["Recycle bin"] },
+            { art: "🥤", q: "Where does a plastic bottle go?", correct: "Recycle bin", wrong: ["Compost bin"] },
+            { art: "🍂", q: "Where do dry leaves go?", correct: "Compost bin", wrong: ["Recycle bin"] },
+            { art: "🥫", q: "Where does a tin can go?", correct: "Recycle bin", wrong: ["Compost bin"] },
+            { art: "🍎", q: "Where does an apple core go?", correct: "Compost bin", wrong: ["Recycle bin"] },
+          ],
+        },
+      },
+      {
+        id: "healthy-habits",
+        title: "Healthy Habits",
+        emoji: "🧼",
+        gameName: "Healthy Routine",
+        blurb: "Put each healthy routine in the right order.",
+        learn:
+          "Washing hands, brushing teeth, and sleeping on time keep our bodies healthy. The steps work best in the right order.",
+        game: {
+          type: "order",
+          rounds: [
+            {
+              art: "🧼",
+              prompt: "Tap the steps to wash your hands in order.",
+              items: ["Wet your hands", "Add soap", "Scrub for 20 seconds", "Rinse and dry"],
+            },
+            {
+              art: "🪥",
+              prompt: "Tap the steps to brush your teeth in order.",
+              items: ["Put on toothpaste", "Brush all your teeth", "Spit it out", "Rinse your mouth"],
+            },
+            {
+              art: "😴",
+              prompt: "Tap the steps of your bedtime in order.",
+              items: ["Eat dinner", "Brush your teeth", "Put on pajamas", "Go to sleep"],
+            },
+          ],
+        },
+      },
     ],
   },
 ];
@@ -138,11 +389,6 @@ export default function GradeOneLessonsScreen({
 }: Props) {
   const { darkMode } = useContext(AppAppearanceContext);
   const [view, setView] = useState<View_>({ kind: "units" });
-  const [pendingGame, setPendingGame] = useState<{
-    game: Game;
-    unitId: string;
-    level: number;
-  } | null>(null);
 
   const activeUnit =
     view.kind === "units" ? null : gradeOneUnits.find((u) => u.id === view.unitId) ?? null;
@@ -218,7 +464,9 @@ export default function GradeOneLessonsScreen({
                     <Pressable
                       key={level}
                       disabled={!unlocked}
-                      onPress={() => setPendingGame({ game, unitId: activeUnit.id, level })}
+                      onPress={() =>
+                        setView({ kind: "game", unitId: activeUnit.id, gameId: game.id, level })
+                      }
                       style={[
                         styles.levelBtn,
                         done && styles.levelBtnDone,
@@ -242,169 +490,17 @@ export default function GradeOneLessonsScreen({
             </Text>
           </View>
         </ScrollView>
-        <LessonInstructionModal
-          visible={pendingGame !== null}
-          title={pendingGame?.game.title ?? ""}
-          instruction={pendingGame?.game.blurb ?? ""}
-          emoji={pendingGame?.game.emoji ?? ""}
-          onStart={() => {
-            if (!pendingGame) return;
-            setView({
-              kind: "game",
-              unitId: pendingGame.unitId,
-              gameId: pendingGame.game.id,
-              level: pendingGame.level,
-            });
-            setPendingGame(null);
-          }}
-          onRequestClose={() => setPendingGame(null)}
-        />
       </SafeAreaView>
     );
   }
 
   // ----- Unit picker -----
   return (
-    <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Pressable onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>Back</Text>
-        </Pressable>
-        <View style={[styles.hero, darkMode && styles.darkCard]}>
-          <Text style={styles.bigEmoji}>🌈</Text>
-          <Text style={[styles.heroTitle, darkMode && styles.darkText]}>Choose an adventure</Text>
-          <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>Pick a unit to start playing!</Text>
-        </View>
-        {gradeOneUnits.map((unit) => (
-          <Pressable
-            key={unit.id}
-            onPress={() => setView({ kind: "unit", unitId: unit.id })}
-            style={[styles.card, darkMode && styles.darkCard]}
-          >
-            <Text style={styles.cardEmoji}>{unit.emoji}</Text>
-            <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
-              Unit {unit.number}: {unit.title}
-            </Text>
-            <Text style={[styles.meta, darkMode && styles.darkMutedText]}>
-              {unit.games.length} {unit.games.length === 1 ? "game" : "games"} · ⭐{" "}
-              {unitStars(unit)}/{unit.games.length * LEVELS.length} →
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </SafeAreaView>
+    <LessonTrailScreen
+      {...props}
+      gradeLabel="Grade 1"
+      subjects={gradeOneSubjects}
+      progressPrefix="grade:1:online"
+    />
   );
 }
-
-// ---------- Styles (same palette as index.tsx) ----------
-
-const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "transparent" },
-  scroll: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 40 },
-  centerPanel: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  backBtn: {
-    alignSelf: "flex-start",
-    backgroundColor: "#C62828",
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginBottom: 10,
-  },
-  backBtnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 14 },
-  hero: {
-    alignItems: "center",
-    backgroundColor: "#DDF5F1",
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 14,
-  },
-  bigEmoji: { fontSize: 54, marginBottom: 6 },
-  heroTitle: { color: "#173B53", fontSize: 24, fontWeight: "900", textAlign: "center" },
-  heroSub: { color: "#36566A", fontSize: 15, lineHeight: 22, textAlign: "center", marginTop: 4 },
-  starsText: { color: "#173B53", fontSize: 16, fontWeight: "800", marginTop: 8 },
-  card: {
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderColor: "#D5F5EB",
-    borderWidth: 2,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-  },
-  cardEmoji: { fontSize: 42, marginBottom: 4 },
-  cardTitle: { color: "#173B53", fontSize: 17, fontWeight: "900", textAlign: "center" },
-  cardBlurb: { color: "#36566A", fontSize: 14, lineHeight: 20, textAlign: "center", marginTop: 4 },
-  meta: { color: "#4B6A7A", fontSize: 13, fontWeight: "800", marginTop: 6 },
-  soon: { color: "#A85B17", fontSize: 12, fontWeight: "900", marginTop: 6 },
-  levelRow: { flexDirection: "row", gap: 8, marginTop: 12, width: "100%" },
-  levelBtn: {
-    flex: 1,
-    alignItems: "center",
-    backgroundColor: "#FFF0AA",
-    borderColor: "#F3C451",
-    borderWidth: 2,
-    borderRadius: 14,
-    paddingVertical: 10,
-  },
-  levelBtnDone: { backgroundColor: "#D5F5EB", borderColor: "#66CBB1" },
-  levelBtnLocked: { backgroundColor: "#E2E8E7", borderColor: "#B9C6C4", opacity: 0.8 },
-  levelStar: { fontSize: 20 },
-  levelText: { color: "#173B53", fontSize: 12, fontWeight: "800", marginTop: 2 },
-  badgeCard: {
-    alignItems: "center",
-    backgroundColor: "#FFF8E7",
-    borderColor: "#F3C451",
-    borderWidth: 2,
-    borderRadius: 20,
-    padding: 14,
-  },
-  targetNumber: { color: "#F17D65", fontSize: 64, fontWeight: "900", marginTop: 4 },
-  basket: {
-    backgroundColor: "#FFF0AA",
-    borderColor: "#F3C451",
-    borderWidth: 2,
-    borderRadius: 20,
-    padding: 14,
-    minHeight: 120,
-    marginBottom: 14,
-  },
-  basketLabel: { color: "#173B53", fontSize: 16, fontWeight: "900", marginBottom: 8 },
-  darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
-  darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
-  darkText: { color: "#E4EAF3" },
-  darkMutedText: { color: "#B9C5D8" },
-  basketItems: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
-  basketEmoji: { fontSize: 32 },
-  counterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 24,
-    marginBottom: 16,
-  },
-  counterBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#258EA3",
-  },
-  counterMinus: { backgroundColor: "#B85B42" },
-  counterText: { color: "#FFFFFF", fontSize: 40, fontWeight: "900", lineHeight: 44 },
-  counterEmoji: { fontSize: 48 },
-  primaryBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 56,
-    borderRadius: 16,
-    backgroundColor: "#F17D65",
-    paddingHorizontal: 16,
-    marginTop: 8,
-    alignSelf: "stretch",
-  },
-  primaryBtnText: { color: "#FFFDF5", fontSize: 16, fontWeight: "800" },
-  feedback: { fontSize: 18, fontWeight: "900", textAlign: "center", marginVertical: 8 },
-  good: { color: "#28543A" },
-  bad: { color: "#9C3E32" },
-});
