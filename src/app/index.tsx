@@ -1791,6 +1791,14 @@ function MenuScreen({
   return (
     <SafeAreaView style={styles.appPage}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to dashboard"
+          onPress={() => setScreen("menu")}
+          style={({ pressed }) => [styles.missionBackButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.missionBackButtonText}>← Back to Dashboard</Text>
+        </Pressable>
         <Text style={styles.pageTitle}>Offline Missions</Text>
         <Text style={styles.pageSubtitle}>
           Showing only {gradeLabels[grade]} missions. Pick one to try at home!
@@ -3230,6 +3238,8 @@ const styles = StyleSheet.create({
   cardBody: { color: "#36566A", fontSize: 15, lineHeight: 22 },
   openButton: { color: "#173B53", fontWeight: "800", fontSize: 14 },
   pageTitle: { color: "#173B53", fontSize: 28, fontWeight: "900", textAlign: "center", marginBottom: 6 },
+  missionBackButton: { alignSelf: "flex-start", backgroundColor: "#258EA3", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12 },
+  missionBackButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   formMessage: { color: "#9C3E32", fontSize: 14, lineHeight: 20, fontWeight: "700", marginBottom: 12 },
   successMessage: { color: "#397147", fontSize: 14, lineHeight: 20, fontWeight: "700", marginBottom: 12 },
   pageSubtitle: { color: "#36566A", fontSize: 16, lineHeight: 23, textAlign: "center", marginBottom: 18 },
