@@ -13,6 +13,39 @@ export type EnglishProblem = {
   explanation: string;
 };
 
+export type EnglishSentenceScrambleActivity = {
+  id: string;
+  question: string;
+  scrambled: string[];
+  answer: string[];
+  noun: string;
+  pronoun: string | null;
+  explanation: string;
+};
+
+export type EnglishGuessQuestion = {
+  id: string;
+  type: "verb" | "adjective";
+  clue: string;
+  sentence: string;
+  choices: string[];
+  answer: string;
+  explanation: string;
+  emoji: string;
+};
+
+export type EnglishStoryPredictionRound = {
+  id: number;
+  title: string;
+  emoji: string;
+  story: string;
+  question: string;
+  choices: string[];
+  answer: string;
+  explanation: string;
+  hint: string;
+};
+
 export type EnglishLesson = {
   id: string;
   category: EnglishLessonCategory;
@@ -27,6 +60,9 @@ export type EnglishLesson = {
   example: string;
   learn: string[];
   problems: EnglishProblem[];
+  sentenceScrambleActivities?: EnglishSentenceScrambleActivity[];
+  guessQuestions?: EnglishGuessQuestion[];
+  storyPredictionRounds?: EnglishStoryPredictionRound[];
 };
 
 export type EnglishQuizQuestion = {
@@ -66,7 +102,7 @@ export const englishCategoryMeta: Record<
   },
 };
 
-export const englishLessons: EnglishLesson[] = [
+const curriculumLessons: EnglishLesson[] = [
   {
     id: "grammar-1",
     category: "grammar",
@@ -84,6 +120,53 @@ export const englishLessons: EnglishLesson[] = [
       "Nouns name people, places, animals, and things.",
       "Pronouns replace nouns. Examples include he, she, it, they, and we.",
       "Use a pronoun to avoid repeating a person's or animal's name.",
+    ],
+    sentenceScrambleActivities: [
+      {
+        id: "g1-s1",
+        question: "Arrange the words to make a sentence about Ana.",
+        scrambled: ["happy.", "is", "Ana"],
+        answer: ["Ana", "is", "happy."],
+        noun: "Ana",
+        pronoun: null,
+        explanation: "Ana is a noun because it names a person.",
+      },
+      {
+        id: "g1-s2",
+        question: "Replace Ana's name with the correct pronoun.",
+        scrambled: ["reading.", "is", "She"],
+        answer: ["She", "is", "reading."],
+        noun: "Ana",
+        pronoun: "She",
+        explanation: "She is a pronoun that replaces Ana's name.",
+      },
+      {
+        id: "g1-s3",
+        question: "Arrange the words to describe Ben and his action.",
+        scrambled: ["book.", "a", "reads", "Ben"],
+        answer: ["Ben", "reads", "a", "book."],
+        noun: "Ben, book",
+        pronoun: null,
+        explanation: "Ben and book are nouns. They name a person and a thing.",
+      },
+      {
+        id: "g1-s4",
+        question: "Use a pronoun instead of repeating Ben's name.",
+        scrambled: ["it.", "likes", "He"],
+        answer: ["He", "likes", "it."],
+        noun: "Ben, book",
+        pronoun: "He, it",
+        explanation: "He replaces Ben, and it replaces the book.",
+      },
+      {
+        id: "g1-s5",
+        question: "Arrange the words to make a sentence about the children.",
+        scrambled: ["playing.", "are", "They"],
+        answer: ["They", "are", "playing."],
+        noun: "children",
+        pronoun: "They",
+        explanation: "They is a pronoun that can replace the noun children.",
+      },
     ],
     problems: [
       {
@@ -115,7 +198,7 @@ export const englishLessons: EnglishLesson[] = [
   {
     id: "grammar-2",
     category: "grammar",
-    lessonNumber: 1,
+    lessonNumber: 2,
     title: "Verbs and Adjectives",
     description:
       "Recognize action words and words that describe people, places, and things.",
@@ -129,6 +212,89 @@ export const englishLessons: EnglishLesson[] = [
       "Verbs tell what someone or something does.",
       "Adjectives describe nouns, such as color, size, or appearance.",
       "In 'The small cat jumps,' small is an adjective and jumps is a verb.",
+    ],
+    guessQuestions: [
+      {
+        id: "g2-guess-1",
+        type: "verb",
+        clue: "I tell what a bird does. A bird can do this in the sky. What word am I?",
+        sentence: "The bird _____ in the sky.",
+        choices: ["Blue", "Flies", "Beautiful", "Soft"],
+        answer: "Flies",
+        explanation: "Flies is a verb because it tells what the bird does.",
+        emoji: "🐦",
+      },
+      {
+        id: "g2-guess-2",
+        type: "adjective",
+        clue: "I describe a flower that looks very nice. What word am I?",
+        sentence: "The _____ flower smells sweet.",
+        choices: ["Run", "Jump", "Beautiful", "Dance"],
+        answer: "Beautiful",
+        explanation:
+          "Beautiful is an adjective because it describes the flower.",
+        emoji: "🌸",
+      },
+      {
+        id: "g2-guess-3",
+        type: "verb",
+        clue: "Children move their bodies to music. What action word am I?",
+        sentence: "The children _____ to the music.",
+        choices: ["Happy", "Dance", "Colorful", "Tall"],
+        answer: "Dance",
+        explanation: "Dance is a verb because it names an action.",
+        emoji: "💃",
+      },
+      {
+        id: "g2-guess-4",
+        type: "adjective",
+        clue: "I describe something that is not small. What word am I?",
+        sentence: "The _____ elephant walks slowly.",
+        choices: ["Walk", "Sleep", "Large", "Sing"],
+        answer: "Large",
+        explanation: "Large is an adjective because it describes the elephant's size.",
+        emoji: "🐘",
+      },
+      {
+        id: "g2-guess-5",
+        type: "verb",
+        clue: "You do this when you move quickly using your legs. What word am I?",
+        sentence: "I _____ to catch the bus.",
+        choices: ["Tiny", "Green", "Run", "Pretty"],
+        answer: "Run",
+        explanation: "Run is a verb because it tells what someone does.",
+        emoji: "🏃",
+      },
+      {
+        id: "g2-guess-6",
+        type: "adjective",
+        clue: "I describe ice cream that has a low temperature. What word am I?",
+        sentence: "The ice cream is _____.",
+        choices: ["Eat", "Cold", "Walk", "Clap"],
+        answer: "Cold",
+        explanation: "Cold is an adjective because it describes the ice cream.",
+        emoji: "🍦",
+      },
+      {
+        id: "g2-guess-7",
+        type: "verb",
+        clue: "You use your voice to make music with words. What word am I?",
+        sentence: "We _____ our favorite song.",
+        choices: ["Soft", "Sing", "Small", "Bright"],
+        answer: "Sing",
+        explanation: "Sing is a verb because it describes an action.",
+        emoji: "🎤",
+      },
+      {
+        id: "g2-guess-8",
+        type: "adjective",
+        clue: "I describe a pillow that feels nice and gentle to touch. What word am I?",
+        sentence: "The pillow is _____.",
+        choices: ["Jump", "Sleep", "Soft", "Dance"],
+        answer: "Soft",
+        explanation: "Soft is an adjective because it describes how the pillow feels.",
+        emoji: "🛏️",
+      },
     ],
     problems: [
       {
@@ -160,7 +326,7 @@ export const englishLessons: EnglishLesson[] = [
   {
     id: "grammar-3",
     category: "grammar",
-    lessonNumber: 1,
+    lessonNumber: 3,
     title: "Sentence Construction",
     description:
       "Arrange words to form complete and grammatically correct sentences.",
@@ -216,34 +382,126 @@ export const englishLessons: EnglishLesson[] = [
   {
     id: "fluency-1",
     category: "fluency",
-    lessonNumber: 2,
-    title: "Reading Short Sentences",
-    description: "Read simple sentences clearly and correctly.",
+    lessonNumber: 4,
+    title: "Reading Comprehension",
+    description: "Read carefully to understand important details in a passage.",
     emoji: "📚",
     storyTitle: "READ WITH ME",
-    storyLine: "The sun is bright. The birds can sing.",
+    storyLine: "Mia fed the birds. They chirped as they ate the seeds.",
     rememberTitle: "Remember This",
-    rememberText: "Read each word carefully and pronounce it correctly.",
-    example: "I like to play outside.",
+    rememberText:
+      "Read the passage carefully and look for details that answer questions.",
+    example: "Mia fed the birds seeds.",
     learn: [
-      "Look carefully at every word.",
-      "Say words clearly and correctly.",
-      "Read a sentence from beginning to end without skipping words.",
+      "Read each sentence carefully.",
+      "Look for details that tell who, what, or where.",
+      "Use information from the passage to answer questions.",
+    ],
+    storyPredictionRounds: [
+      {
+        id: 1,
+        title: "The Hungry Birds",
+        emoji: "🐦",
+        story:
+          "One sunny morning, Mia went to the garden with a small bag of bird seeds. She sprinkled some seeds on the ground. Soon, three little birds flew down and began to eat.",
+        question: "What will most likely happen next?",
+        choices: [
+          "The birds will fly away without eating.",
+          "More birds may come to eat the seeds.",
+          "Mia will turn into a bird.",
+          "The seeds will become toys.",
+        ],
+        answer: "More birds may come to eat the seeds.",
+        explanation:
+          "The birds found food in the garden, so more birds might come when they see the seeds.",
+        hint: "Think about what other hungry birds might do when they see food.",
+      },
+      {
+        id: 2,
+        title: "The Rainy Day",
+        emoji: "🌧️",
+        story:
+          "Ben was walking home from school when dark clouds covered the sky. A few drops of rain fell on his head. He looked inside his school bag and saw his folded umbrella.",
+        question: "What will Ben probably do next?",
+        choices: [
+          "Open his umbrella.",
+          "Start swimming in the road.",
+          "Put on his sunglasses at night.",
+          "Throw his school bag away.",
+        ],
+        answer: "Open his umbrella.",
+        explanation:
+          "Ben has an umbrella and rain is falling, so opening it is a sensible next step.",
+        hint: "What can Ben use to protect himself from the rain?",
+      },
+      {
+        id: 3,
+        title: "The Lost Puppy",
+        emoji: "🐶",
+        story:
+          "Ana heard a soft whimper near a tree in the park. She found a little puppy wearing a collar. The puppy looked scared, and Ana noticed a name tag attached to its collar.",
+        question: "What should Ana do next?",
+        choices: [
+          "Leave the puppy alone in the park.",
+          "Hide the puppy from everyone.",
+          "Read the tag and ask a trusted adult to help find its owner.",
+          "Take the puppy far away from the park.",
+        ],
+        answer:
+          "Read the tag and ask a trusted adult to help find its owner.",
+        explanation:
+          "The tag may contain information about the puppy, and a trusted adult can help return it safely.",
+        hint:
+          "The collar has a name tag. Who could help Ana use that information safely?",
+      },
+      {
+        id: 4,
+        title: "The Little Seed",
+        emoji: "🌱",
+        story:
+          "Liza planted a tiny seed in a pot. Every morning, she watered the soil and placed the pot near a sunny window. After several days, she noticed a small green shoot coming out of the soil.",
+        question: "What might happen next?",
+        choices: [
+          "The plant may continue growing leaves.",
+          "The plant will become a bicycle.",
+          "The soil will start singing.",
+          "The seed will turn into a shoe.",
+        ],
+        answer: "The plant may continue growing leaves.",
+        explanation:
+          "The seed has started to grow. With proper care, the young plant may grow more leaves.",
+        hint:
+          "The tiny seed has already started growing. What usually grows on a young plant?",
+      },
+      {
+        id: 5,
+        title: "The Birthday Surprise",
+        emoji: "🎂",
+        story:
+          "It was Carlo's birthday. His friends decorated the classroom with balloons and colorful paper. They placed a cake on the table and asked Carlo to close his eyes before he entered the room.",
+        question: "What will Carlo probably see when he opens his eyes?",
+        choices: [
+          "An empty classroom with no decorations.",
+          "A birthday surprise prepared by his friends.",
+          "A snowstorm inside the classroom.",
+          "His friends leaving for school.",
+        ],
+        answer: "A birthday surprise prepared by his friends.",
+        explanation:
+          "His friends decorated the room and prepared a cake, so they are likely planning a birthday surprise.",
+        hint:
+          "Why did his friends decorate the classroom and ask him to close his eyes?",
+      },
     ],
     problems: [
       {
         id: "f1-p1",
-        question: "Which is the best way to read a sentence?",
-        displayText: "The bird is in the tree.",
-        choices: [
-          "Skip some words.",
-          "Read as fast as possible.",
-          "Read each word clearly.",
-          "Guess every word.",
-        ],
-        answer: "Read each word clearly.",
+        question: "What did Mia feed the birds?",
+        displayText: "Mia fed the birds. They chirped as they ate the seeds.",
+        choices: ["Leaves", "Seeds", "Flowers", "Bread"],
+        answer: "Seeds",
         explanation:
-          "Good reading means saying the words clearly and correctly.",
+          "The passage says that the birds ate the seeds Mia gave them.",
       },
     ],
   },
@@ -320,9 +578,10 @@ export const englishLessons: EnglishLesson[] = [
   {
     id: "vocabulary-1",
     category: "vocabulary",
-    lessonNumber: 3,
-    title: "Synonyms and Antonyms",
-    description: "Identify words with similar and opposite meanings.",
+    lessonNumber: 5,
+    title: "Vocabulary Building",
+    description:
+      "Build vocabulary by recognizing words with similar and opposite meanings.",
     emoji: "🔄",
     storyTitle: "WORD TWINS",
     storyLine: "Find words that mean the same or the opposite.",
@@ -601,6 +860,18 @@ export const englishLessons: EnglishLesson[] = [
     ],
   },
 ];
+
+const selectedEnglishLessonIds = new Set([
+  "grammar-1",
+  "grammar-2",
+  "grammar-3",
+  "fluency-1",
+  "vocabulary-1",
+]);
+
+export const englishLessons = curriculumLessons.filter((lesson) =>
+  selectedEnglishLessonIds.has(lesson.id),
+);
 
 export const englishQuizQuestions: EnglishQuizQuestion[] =
   englishLessons.flatMap((lesson) =>
