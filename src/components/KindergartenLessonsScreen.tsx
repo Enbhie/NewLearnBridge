@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import LessonInstructionModal from "./LessonInstructionModal";
 import {
   HealthyRoutineGame,
   HouseBuilderGame,
@@ -164,6 +165,11 @@ export default function KindergartenLessonsScreen({
 }: Props) {
   const { darkMode } = useContext(AppAppearanceContext);
   const [view, setView] = useState<View_>({ kind: "units" });
+  const [pendingGame, setPendingGame] = useState<{
+    game: Game;
+    unitId: string;
+    level: number;
+  } | null>(null);
 
   const activeUnit =
     view.kind === "units" ? null : kindergartenUnits.find((u) => u.id === view.unitId) ?? null;
@@ -264,9 +270,7 @@ export default function KindergartenLessonsScreen({
                     <Pressable
                       key={level}
                       disabled={!unlocked}
-                      onPress={() =>
-                        setView({ kind: "game", unitId: activeUnit.id, gameId: game.id, level })
-                      }
+                      onPress={() => setPendingGame({ game, unitId: activeUnit.id, level })}
                       style={[
                         styles.levelBtn,
                         done && styles.levelBtnDone,
@@ -290,6 +294,23 @@ export default function KindergartenLessonsScreen({
             </Text>
           </View>
         </ScrollView>
+        <LessonInstructionModal
+          visible={pendingGame !== null}
+          title={pendingGame?.game.title ?? ""}
+          instruction={pendingGame?.game.blurb ?? ""}
+          emoji={pendingGame?.game.emoji ?? ""}
+          onStart={() => {
+            if (!pendingGame) return;
+            setView({
+              kind: "game",
+              unitId: pendingGame.unitId,
+              gameId: pendingGame.game.id,
+              level: pendingGame.level,
+            });
+            setPendingGame(null);
+          }}
+          onRequestClose={() => setPendingGame(null)}
+        />
       </SafeAreaView>
     );
   }

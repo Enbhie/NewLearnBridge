@@ -158,7 +158,7 @@ export default function ShapeRecognitionScreen() {
     : [];
 
   const cameraRef = useRef<CameraView>(null);
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<WebView<object>>(null);
   const predictionResolverRef = useRef<PredictionMessage | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
@@ -516,7 +516,7 @@ export default function ShapeRecognitionScreen() {
         <Text style={styles.buttonText}>Back</Text>
       </TouchableOpacity>
 
-      <WebView
+      <WebView<object>
         ref={webViewRef}
         source={{ html, baseUrl: MODEL_URL }}
         originWhitelist={["*"]}

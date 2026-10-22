@@ -16,6 +16,7 @@ import {
     updateProfile,
     type User,
 } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import GradeOneLessonsScreen, { gradeOneLessonCount } from "../components/GradeOneLessonsScreen";
 import {
@@ -44,6 +45,9 @@ import {
 } from "../components/CloudBackdrop";
 import { AnimatedPressable as Pressable } from "../components/AnimatedPressable";
 import CharacterSelectScreen from "../components/CharacterSelectScreen";
+import InternetRequiredModal, {
+  useInternetRequirement,
+} from "../components/InternetRequiredModal";
 import LessonCompleteScreen from "../components/LessonCompleteScreen";
 import KindergartenLessonsScreen, {
   kindergartenLessonCount,
@@ -71,7 +75,7 @@ import {
   lessonContent,
   type CategoryId,
 } from "../data/learningContent";
-import { auth, firebaseConfigured } from "../firebase";
+import { auth, firebaseConfigured, firestore } from "../firebase";
 import {
   setBackgroundMusic,
   type BackgroundMusicTrack,
@@ -236,7 +240,7 @@ type DailyScreenTimePersistence = {
 type StoredLearnerProfiles = {
   version: 2;
   profiles: LearnerProfile[];
-  activeProfileId: string;
+  activeProfileId: string | null;
 };
 
 function getLocalDateStamp(date = new Date()): string {
@@ -293,13 +297,67 @@ function getAuthErrorMessage(error: unknown) {
 
 function requireFirebaseAuth() {
   if (!auth) {
-    throw new Error("Firebase is not configured. Set the EXPO_PUBLIC_FIREBASE values in .env.local.");
+    throw new Error(
+      "Firebase is not configured in this APK. Add the EXPO_PUBLIC_FIREBASE variables to the matching EAS environment, then build a new APK."
+    );
   }
   return auth;
 }
 
 function getLessonProgressStorageKey(userId: string, profileId: string): string {
   return `${LESSON_PROGRESS_STORAGE_PREFIX}${userId}.${profileId}`;
+}
+
+function isLearnerProfile(value: unknown): value is LearnerProfile {
+  if (!value || typeof value !== "object") return false;
+  const profile = value as {
+    id?: unknown;
+    childName?: unknown;
+    childBirthdate?: unknown;
+    selectedIcon?: unknown;
+    grade?: unknown;
+  };
+  return (
+    typeof profile.id === "string" &&
+    typeof profile.childName === "string" &&
+    typeof profile.childBirthdate === "string" &&
+    typeof profile.selectedIcon === "string" &&
+    (profile.grade === undefined ||
+      (typeof profile.grade === "string" &&
+        Object.prototype.hasOwnProperty.call(gradeLabels, profile.grade)))
+  );
+}
+
+function parseStoredLearnerProfiles(value: unknown, userId: string): StoredLearnerProfiles {
+  if (!value || typeof value !== "object") {
+    throw new Error("Saved child profiles have an invalid format.");
+  }
+
+  const stored = value as Record<string, unknown>;
+  let profiles: LearnerProfile[];
+  if (Array.isArray(stored.profiles)) {
+    if (!stored.profiles.every(isLearnerProfile)) {
+      throw new Error("Saved child profiles have an invalid format.");
+    }
+    profiles = stored.profiles;
+  } else if (typeof stored.childName === "string") {
+    profiles = [{
+      id: `legacy-${userId}`,
+      childName: stored.childName,
+      childBirthdate: typeof stored.childBirthdate === "string" ? stored.childBirthdate : "",
+      selectedIcon: typeof stored.selectedIcon === "string" ? stored.selectedIcon : KID_ICONS[0],
+    }];
+  } else {
+    profiles = [];
+  }
+
+  const activeProfileId =
+    typeof stored.activeProfileId === "string" &&
+    profiles.some((profile) => profile.id === stored.activeProfileId)
+      ? stored.activeProfileId
+      : profiles[0]?.id ?? null;
+
+  return { version: 2, profiles, activeProfileId };
 }
 
 // --- HELPER COMPONENTS (OUTSIDE APP) ---
@@ -440,19 +498,14 @@ function BottomNavigation({
 function HomeScreen({
   onPlay,
   setScreen,
-  darkMode,
 }: {
   onPlay: () => void;
   setScreen: (s: Screen) => void;
-  darkMode: boolean;
 }) {
   return (
     <SafeAreaView style={styles.homePage}>
       <View
-        style={[
-          styles.homeCard,
-          darkMode ? styles.homeCardNight : styles.homeCardDay,
-        ]}
+        style={[styles.homeCard, styles.homeCardDay]}
       >
         <Image
           source={require("../../assets/images/main-logo.png")}
@@ -461,8 +514,8 @@ function HomeScreen({
           accessibilityLabel="LearnBridge owl logo"
         />
 
-        <Text style={[styles.homeTitle, darkMode && styles.homeTitleNight]}>LearnBridge</Text>
-        <Text style={[styles.homeSubtitle, darkMode && styles.homeSubtitleNight]}>
+        <Text style={styles.homeTitle}>LearnBridge</Text>
+        <Text style={styles.homeSubtitle}>
           Little learners. Big discoveries.
         </Text>
 
@@ -496,8 +549,10 @@ function LoginScreen({
   const [passwordError, setPasswordError] = useState("");
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isOffline, checkInternet } = useInternetRequirement();
 
   const handleLogin = async () => {
+    if (isOffline) return;
     const nextEmailError = !email.trim()
       ? "Enter your email address."
       : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
@@ -509,6 +564,17 @@ function LoginScreen({
     setFormError("");
 
     if (nextEmailError || nextPasswordError) {
+      return;
+    }
+
+    try {
+      if (!(await checkInternet())) return;
+    } catch (error) {
+      setFormError(
+        error instanceof Error
+          ? `Could not check your internet connection: ${error.message}`
+          : "Could not check your internet connection. Please try again."
+      );
       return;
     }
 
@@ -607,6 +673,10 @@ function LoginScreen({
           </View>
         </View>
       </ScrollView>
+      <InternetRequiredModal
+        visible={isOffline}
+        onCheckInternet={checkInternet}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -757,6 +827,7 @@ function SignUpScreen({
   const [birthdateYear, setBirthdateYear] = useState(initialYear);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formMessage, setFormMessage] = useState("");
+  const { isOffline, checkInternet } = useInternetRequirement();
   const [fieldErrors, setFieldErrors] = useState<Record<SignUpField, string>>({
     name: "",
     birthdate: "",
@@ -789,6 +860,7 @@ function SignUpScreen({
   };
 
   const handleRegister = async () => {
+    if (isOffline) return;
     const childAge = getAgeFromBirthdate(childBirthdate.trim());
     const errors: Record<SignUpField, string> = {
       name: childName.trim() ? "" : "Enter the child's name.",
@@ -824,6 +896,17 @@ function SignUpScreen({
     }
 
     setFormMessage("");
+    try {
+      if (!(await checkInternet())) return;
+    } catch (error) {
+      setFormMessage(
+        error instanceof Error
+          ? `Could not check your internet connection: ${error.message}`
+          : "Could not check your internet connection. Please try again."
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await onRegister(
@@ -854,6 +937,10 @@ function SignUpScreen({
         } else {
           setFormMessage(message);
         }
+      } else {
+        setFormMessage(
+          "Firebase is not configured in this APK. Add the EXPO_PUBLIC_FIREBASE variables to the matching EAS environment, then build a new APK."
+        );
       }
     } finally {
       setIsSubmitting(false);
@@ -876,7 +963,7 @@ function SignUpScreen({
           <View style={styles.formContainer}>
             {!firebaseConfigured && (
               <Text style={styles.formMessage}>
-                Firebase setup is required. Fill in .env.local from .env.example, then restart Expo.
+                Firebase is not connected in this build. Add the Firebase EXPO_PUBLIC variables to the EAS build environment and create a new APK.
               </Text>
             )}
             <View style={styles.inputGroup}>
@@ -1044,6 +1131,10 @@ function SignUpScreen({
           </View>
         </View>
       </ScrollView>
+      <InternetRequiredModal
+        visible={isOffline}
+        onCheckInternet={checkInternet}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -2122,6 +2213,7 @@ export default function App() {
   const [childBirthdate, setChildBirthdate] = useState("");
   const [childProfiles, setChildProfiles] = useState<LearnerProfile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [profilesReady, setProfilesReady] = useState(false);
   const activeLearnerProfile = childProfiles.find((profile) => profile.id === activeProfileId);
   const childGrade = activeLearnerProfile?.grade ?? null;
   const [parentEmail, setParentEmail] = useState("");
@@ -2131,8 +2223,8 @@ export default function App() {
   const [preferencesReady, setPreferencesReady] = useState(false);
 
   useEffect(() => {
-    setDarkMode(preferences.darkMode);
-  }, [preferences.darkMode, setDarkMode]);
+    setDarkMode(Boolean(firebaseUser && screen !== "home" && preferences.darkMode));
+  }, [firebaseUser, preferences.darkMode, screen, setDarkMode]);
 
   const [quizResults, setQuizResults] = useState<{
     correct: number;
@@ -2158,64 +2250,74 @@ export default function App() {
 
     return onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
+      setPreferences(DEFAULT_PREFERENCES);
       if (!user) {
         setPreferencesReady(false);
+        setProfilesReady(true);
         setChildProfiles([]);
         setActiveProfileId(null);
         return;
       }
 
       setPreferencesReady(false);
+      setProfilesReady(false);
       setParentEmail(user.email ?? "");
-      void AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`)
-        .then(async (storedProfile) => {
-          if (auth?.currentUser?.uid !== user.uid) return;
-          const parsed: Partial<StoredLearnerProfiles> & Partial<LearnerProfile> = storedProfile
-            ? JSON.parse(storedProfile) as Partial<StoredLearnerProfiles> & Partial<LearnerProfile>
-            : {};
-          const profiles: LearnerProfile[] = Array.isArray(parsed.profiles)
-            ? parsed.profiles
-            : parsed.childName
-              ? [{
-                  id: `legacy-${user.uid}`,
-                  childName: parsed.childName,
-                  childBirthdate: parsed.childBirthdate ?? "",
-                  selectedIcon: parsed.selectedIcon ?? KID_ICONS[0],
-                }]
-              : [];
-          const activeId = profiles.some((profile) => profile.id === parsed.activeProfileId)
-            ? parsed.activeProfileId!
-            : profiles[0]?.id ?? null;
-          setChildProfiles(profiles);
-          setActiveProfileId(activeId);
-          const activeProfile = profiles.find((profile) => profile.id === activeId);
-          if (activeProfile) {
-            setChildName(activeProfile.childName);
-            setChildBirthdate(activeProfile.childBirthdate);
-            setSelectedIcon(activeProfile.selectedIcon);
+      setChildProfiles([]);
+      setActiveProfileId(null);
+      void (async () => {
+        if (!firestore) {
+          throw new Error("Cloud profile storage is not configured.");
+        }
+        const profileRef = doc(firestore, "users", user.uid, "learnerProfiles", "current");
+        const cloudProfile = await getDoc(profileRef);
+        let stored: StoredLearnerProfiles;
+        if (cloudProfile.exists()) {
+          stored = parseStoredLearnerProfiles(cloudProfile.data(), user.uid);
+        } else {
+          const localProfile = await AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`);
+          stored = localProfile
+            ? parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid)
+            : { version: 2, profiles: [], activeProfileId: null };
+          if (stored.profiles.length > 0) {
+            await setDoc(profileRef, stored);
           }
-          if (profiles.length && !Array.isArray(parsed.profiles)) {
-            await AsyncStorage.setItem(
-              `${PROFILE_STORAGE_PREFIX}${user.uid}`,
-              JSON.stringify({ version: 2, profiles, activeProfileId: activeId })
-            );
-          }
-          if (user.emailVerified) {
-            setScreen((currentScreen) => {
-              const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
-              if (!canRedirect) return currentScreen;
-              return activeProfile?.grade ? "menu" : "grade-selection";
-            });
-          }
-        })
-        .catch((error: unknown) => {
-          if (auth?.currentUser?.uid === user.uid) {
-            Alert.alert(
-              "Could not load child profile",
-              error instanceof Error ? error.message : "Check device storage and try again."
-            );
-          }
-        });
+        }
+
+        if (auth?.currentUser?.uid !== user.uid) return;
+        if (stored.profiles.length > 0) {
+          await AsyncStorage.setItem(
+            `${PROFILE_STORAGE_PREFIX}${user.uid}`,
+            JSON.stringify(stored)
+          );
+        }
+        if (auth?.currentUser?.uid !== user.uid) return;
+        setChildProfiles(stored.profiles);
+        setActiveProfileId(stored.activeProfileId);
+        const activeProfile = stored.profiles.find(
+          (profile) => profile.id === stored.activeProfileId
+        );
+        if (activeProfile) {
+          setChildName(activeProfile.childName);
+          setChildBirthdate(activeProfile.childBirthdate);
+          setSelectedIcon(activeProfile.selectedIcon);
+        }
+        setProfilesReady(true);
+        if (user.emailVerified) {
+          setScreen((currentScreen) => {
+            const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
+            if (!canRedirect) return currentScreen;
+            return activeProfile?.grade ? "menu" : "grade-selection";
+          });
+        }
+      })().catch((error: unknown) => {
+        if (auth?.currentUser?.uid === user.uid) {
+          setProfilesReady(true);
+          Alert.alert(
+            "Could not load child profile",
+            error instanceof Error ? error.message : "Check your connection and try again."
+          );
+        }
+      });
 
       void AsyncStorage.getItem(`${SETTINGS_STORAGE_PREFIX}${user.uid}`)
         .then((storedPreferences) => {
@@ -2448,11 +2550,16 @@ export default function App() {
   ) => {
     const currentUser = requireFirebaseAuth().currentUser;
     if (!currentUser) throw new Error("Sign in again to manage child profiles.");
+    if (!firestore) throw new Error("Cloud profile storage is not configured.");
     const data: StoredLearnerProfiles = {
       version: 2,
       profiles,
       activeProfileId: profileId,
     };
+    await setDoc(
+      doc(firestore, "users", currentUser.uid, "learnerProfiles", "current"),
+      data
+    );
     await AsyncStorage.setItem(
       `${PROFILE_STORAGE_PREFIX}${currentUser.uid}`,
       JSON.stringify(data)
@@ -2634,7 +2741,6 @@ export default function App() {
         }
         return;
       }
-      setScreen("menu");
     } catch (error) {
       throw new Error(getAuthErrorMessage(error));
     }
@@ -2656,13 +2762,19 @@ export default function App() {
         registerPassword
       );
       await updateProfile(user, { displayName: profile.childName });
+      if (!firestore) throw new Error("Cloud profile storage is not configured.");
+      const profiles: StoredLearnerProfiles = {
+        version: 2,
+        profiles: [profile],
+        activeProfileId: profile.id,
+      };
       await AsyncStorage.setItem(
         `${PROFILE_STORAGE_PREFIX}${user.uid}`,
-        JSON.stringify({
-          version: 2,
-          profiles: [profile],
-          activeProfileId: profile.id,
-        } satisfies StoredLearnerProfiles)
+        JSON.stringify(profiles)
+      );
+      await setDoc(
+        doc(firestore, "users", user.uid, "learnerProfiles", "current"),
+        profiles
       );
       setFirebaseUser(user);
       setChildProfiles([profile]);
@@ -2819,7 +2931,6 @@ export default function App() {
   if (screen === "home") {
     return (
       <HomeScreen
-        darkMode={preferences.darkMode}
         onPlay={() => {
           if (!firebaseUser) {
             setScreen("signup");
@@ -2834,7 +2945,11 @@ export default function App() {
     );
   }
 
-  if (firebaseUser && screen !== "verify-email" && (!screenTimeReady || !preferencesReady)) {
+  if (
+    firebaseUser &&
+    screen !== "verify-email" &&
+    (!profilesReady || !screenTimeReady || !preferencesReady)
+  ) {
     return (
       <SafeAreaView style={styles.limitReachedPage}>
         <Text style={styles.limitReachedText}>Loading account settings...</Text>
@@ -3032,9 +3147,6 @@ export default function App() {
     return (
       <GradeTwoLessonsScreen
         difficulty={preferences.difficulty}
-        onDifficultyChange={(difficulty) => {
-          void handlePreferencesChange({ ...preferences, difficulty });
-        }}
         onBack={() => {
           setCurriculumCategory(null);
           setScreen("menu");
@@ -3128,7 +3240,6 @@ export default function App() {
 
   return (
     <HomeScreen
-      darkMode={preferences.darkMode}
       onPlay={() => setScreen("signup")}
       setScreen={setScreen}
     />
@@ -3164,11 +3275,6 @@ const styles = StyleSheet.create({
   homeCardDay: {
     backgroundColor: "rgba(255, 248, 231, 0.72)",
   },
-  homeCardNight: {
-    backgroundColor: "rgba(16, 25, 54, 0.76)",
-  },
-  homeTitleNight: { color: "#F3F4FF" },
-  homeSubtitleNight: { color: "#D2DAF0" },
   homeLogo: { width: 380, height: 380, marginBottom: 4 },
   homeTitle: { color: "#173B53", fontSize: 37, fontWeight: "900", textAlign: "center" },
   homeSubtitle: { color: "#36566A", fontSize: 17, fontWeight: "700", textAlign: "center", marginTop: 5, marginBottom: 22 },
@@ -3243,7 +3349,7 @@ const styles = StyleSheet.create({
   pageSubtitle: { color: "#36566A", fontSize: 16, lineHeight: 23, textAlign: "center", marginBottom: 18 },
   missionCard: { backgroundColor: "#FFFFFF", borderColor: "#FFFFFF", borderWidth: 2, borderRadius: 20, padding: 15, marginBottom: 14, shadowColor: "#24546A", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.13, shadowRadius: 4, elevation: 3 },
   missionReviewContainer: { width: "100%", maxWidth: 460, maxHeight: "92%" },
-  missionReviewScroll: { flexGrow: 1, justifyContent: "center", alignItems: "center", paddingVertical: 16 },
+  missionReviewScroll: { flexGrow: 1, justifyContent: "flex-end", alignItems: "flex-end", paddingVertical: 16 },
   missionPendingPage: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#EAF5F7", padding: 24 },
   missionPendingIcon: { fontSize: 68, marginBottom: 12 },
   missionPendingTitle: { color: "#173B53", fontSize: 27, lineHeight: 34, fontWeight: "900", textAlign: "center" },
@@ -3356,6 +3462,6 @@ const styles = StyleSheet.create({
   iconOption: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#F0F4EC", justifyContent: "center", alignItems: "center", borderWidth: 2, borderColor: "transparent" },
   selectedIconOption: { borderColor: "#759B57", backgroundColor: "#E4F0DF" },
   iconOptionText: { fontSize: 24 },
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(23,59,83,0.55)", alignItems: "center", justifyContent: "center", padding: 20 },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(23,59,83,0.55)", alignItems: "flex-end", justifyContent: "flex-end", padding: 20 },
   modalCard: { width: "100%", maxWidth: 420, backgroundColor: "#FFF8E7", borderRadius: 22, padding: 20 },
 });

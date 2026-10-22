@@ -1,9 +1,10 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import { gradeLabels } from "../data/offlineMissions";
 import { categoryMeta, lessonContent, type CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { AppAppearanceContext } from "./CloudBackdrop";
+import LessonInstructionModal from "./LessonInstructionModal";
 
 type Props = {
   category: CategoryId;
@@ -13,6 +14,7 @@ type Props = {
 
 export default function LessonScreen({ category, onBack, onContinue }: Props) {
   const { darkMode } = useContext(AppAppearanceContext);
+  const [lessonStarted, setLessonStarted] = useState(false);
   const content = lessonContent[category];
   const meta = categoryMeta[category];
   const gradeLabel = content.grade === "K" ? gradeLabels.K : gradeLabels[content.grade];
@@ -101,6 +103,14 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
           <Text style={styles.continueText}>CONTINUE</Text>
         </Pressable>
       </View>
+      <LessonInstructionModal
+        visible={!lessonStarted}
+        title={content.title}
+        instruction="Read the lesson, then tap Continue to start the quiz."
+        emoji={meta.emoji}
+        onStart={() => setLessonStarted(true)}
+        onRequestClose={onBack}
+      />
     </SafeAreaView>
   );
 }

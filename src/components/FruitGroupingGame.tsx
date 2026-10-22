@@ -10,6 +10,7 @@ import {
   View,
   useWindowDimensions,
   type LayoutRectangle,
+  type ViewInstance,
 } from "react-native";
 import { playFeedback } from "../utils/soundEffects";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
@@ -144,8 +145,8 @@ export default function FruitGroupingGame({
   );
   const [feedback, setFeedback] = useState("Choose a fruit and drag it into the right basket.");
   const [roundComplete, setRoundComplete] = useState(false);
-  const slotRefs = useRef<(View | null)[]>([]);
-  const rootRef = useRef<View | null>(null);
+  const slotRefs = useRef<(ViewInstance | null)[]>([]);
+  const rootRef = useRef<ViewInstance | null>(null);
   const rootOffset = useRef({ x: 0, y: 0 });
   const dragPosition = useRef(new Animated.ValueXY()).current;
   const dropRotation = useRef(new Animated.Value(0)).current;
