@@ -57,6 +57,7 @@ import KindergartenLessonsScreen, {
 import GradeTwoLessonsScreen, {
   gradeTwoLessonCount,
 } from "../components/GradeTwoLessonsScreen";
+import GradeThreeLessonsScreen from "../components/GradeThreeLessonsScreen";
 import LessonScreen from "../components/LessonScreen";
 import QuizScreen from "../components/QuizScreen";
 import ResultsScreen from "../components/ResultsScreen";
@@ -131,6 +132,7 @@ type Screen =
   | "kinder-lessons"
   | "grade2-lessons"
   | "grade1-lessons"
+  | "grade3-lessons"
   | "tutorial"
   | "character-select"
   | "lesson"
@@ -166,6 +168,7 @@ function getBackgroundMusicTrack(
       "kinder-lessons",
       "grade1-lessons",
       "grade2-lessons",
+      "grade3-lessons",
       "character-select",
       "settings",
     ].includes(screen)
@@ -184,7 +187,6 @@ type Mission = {
 
 function requiresParentEmailReview(mission: OfflineMission): boolean {
   return mission.submission === "photo";
-  return mission.grade === "2" || ["K-3", "K-4", "K-5"].includes(mission.id);
 }
 
 const missions: Mission[] = [
@@ -1700,6 +1702,10 @@ function MenuScreen({
               <ActionButton onPress={() => setScreen("grade2-lessons")} variant="secondary">
                 OPEN GRADE 2 ONLINE LESSONS
               </ActionButton>
+            ) : grade === "3" ? (
+              <ActionButton onPress={() => setScreen("grade3-lessons")} variant="secondary">
+                OPEN GRADE 3 ONLINE LESSONS
+              </ActionButton>
             ) : (
               <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>
                 No online lessons for {grade ? gradeLabels[grade] : "this grade"} yet. Try an offline mission.
@@ -1730,6 +1736,10 @@ function MenuScreen({
             ) : grade === "1" ? (
               <ActionButton onPress={() => setScreen("grade1-lessons")} variant="secondary">
                 OPEN GRADE 1 ONLINE LESSONS
+              </ActionButton>
+            ) : grade === "3" ? (
+              <ActionButton onPress={() => setScreen("grade3-lessons")} variant="secondary">
+                OPEN GRADE 3 ONLINE LESSONS
               </ActionButton>
             ) : null}
             <ActionButton onPress={() => setScreen("missions")}>
@@ -2137,8 +2147,8 @@ function MenuScreen({
     }
   }
   const submissionStatusLabels: Record<OfflineMissionSubmission["status"], string> = {
-    saved_offline: "Saved Offline",
-    pending_upload: "Pending Upload",
+    saved_offline: "Pending Upload — saved on this device",
+    pending_upload: "Pending Upload — waiting for connection",
     uploading: "Uploading",
     submitted_successfully: "Submitted Successfully",
     upload_failed: "Upload Failed — will retry when online",
@@ -2281,7 +2291,7 @@ function MenuScreen({
                   ) : null}
                 </View>
               ) : null}
-              {mission.grade === "2" ? (
+              {mission.submission === "photo" ? (
                 <Text style={styles.missionPhotoInstruction}>
                   📷 Take a photo of your work to send to your parent for approval.
                 </Text>
@@ -2642,6 +2652,28 @@ export default function App() {
     const currentAuth = auth;
     if (!currentAuth) return;
 
+    const syncPendingMissionPhotos = (userId: string) => {
+      void syncMissionSubmissions(userId, (submission) => {
+        if (submission.status !== "submitted_successfully") return;
+        const review: MissionReview = {
+          id: submission.id,
+          missionId: submission.missionId,
+          status: "pending",
+        };
+        void AsyncStorage.setItem(
+          `learnbridge.pending-mission-review.${userId}`,
+          JSON.stringify(review)
+        ).catch((error: unknown) => {
+          console.warn(
+            "Mission photo was sent, but its pending review could not be saved on this device.",
+            error
+          );
+        });
+      }).catch((error: unknown) => {
+        console.warn("Saved mission photos will retry when the connection is available.", error);
+      });
+    };
+
     const unsubscribeAuth = onAuthStateChanged(currentAuth, (user) => {
       setFirebaseUser(user);
       setPreferences(DEFAULT_PREFERENCES);
@@ -2653,6 +2685,7 @@ export default function App() {
         setLegalConsent(undefined);
         return;
       }
+      if (user.emailVerified) syncPendingMissionPhotos(user.uid);
 
       setPreferencesReady(false);
       setProfilesReady(false);
@@ -2817,16 +2850,24 @@ export default function App() {
       if (state.isConnected !== true || state.isInternetReachable === false) return;
       const userId = currentAuth.currentUser?.uid;
       if (!userId) return;
+      if (currentAuth.currentUser?.emailVerified) syncPendingMissionPhotos(userId);
       void syncPendingLearnerProfiles(userId).catch((error: unknown) => {
         if (currentAuth.currentUser?.uid === userId) {
           console.warn("Learner profile sync will retry when the connection is available.", error);
         }
       });
     });
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      const user = currentAuth.currentUser;
+      if (state === "active" && user?.emailVerified) {
+        syncPendingMissionPhotos(user.uid);
+      }
+    });
 
     return () => {
       unsubscribeAuth();
       networkSubscription.remove();
+      appStateSubscription.remove();
     };
   }, []);
 
@@ -3809,6 +3850,9 @@ export default function App() {
         onCompleteLesson={(lessonId) => void handleCompleteLesson(lessonId)}
       />
     );
+  }
+  if (screen === "grade3-lessons") {
+    return <GradeThreeLessonsScreen onBack={() => setScreen("menu")} />;
   }
 
   if (screen === "tutorial") {

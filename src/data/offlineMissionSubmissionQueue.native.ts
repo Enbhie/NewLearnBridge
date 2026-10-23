@@ -29,7 +29,12 @@ const PHOTO_DIRECTORY = new Directory(Paths.document, "mission-submissions");
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
-const syncPromises = new Map<string, Promise<void>>();
+type StatusChangeListener = (submission: OfflineMissionSubmission) => void;
+type SyncJob = {
+  listeners: Set<StatusChangeListener>;
+  promise: Promise<void>;
+};
+const syncPromises = new Map<string, SyncJob>();
 
 function openDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!databasePromise) {
@@ -118,7 +123,7 @@ export async function saveMissionPhotoSubmission(
     fileUri: durableFile.uri,
     contentType,
     submittedAt: new Date().toISOString(),
-    status: "saved_offline",
+    status: "pending_upload",
     errorMessage: null,
   };
 
@@ -167,7 +172,7 @@ export async function getMissionSubmissions(
 
 async function syncUserSubmissions(
   userId: string,
-  onStatusChange: (submission: OfflineMissionSubmission) => void
+  onStatusChange: StatusChangeListener
 ): Promise<void> {
   const network = await Network.getNetworkStateAsync();
   if (network.isConnected !== true || network.isInternetReachable === false) return;
@@ -249,16 +254,35 @@ async function syncUserSubmissions(
 
 export function syncMissionSubmissions(
   userId: string,
-  onStatusChange: (submission: OfflineMissionSubmission) => void
+  onStatusChange: StatusChangeListener
 ): Promise<void> {
-  const existingSync = syncPromises.get(userId);
-  if (existingSync) return existingSync;
+  let job = syncPromises.get(userId);
+  if (!job) {
+    const listeners = new Set<StatusChangeListener>([onStatusChange]);
+    const newJob: SyncJob = {
+      listeners,
+      promise: Promise.resolve(),
+    };
+    newJob.promise = syncUserSubmissions(userId, (submission) => {
+      for (const listener of [...listeners]) {
+        try {
+          listener(submission);
+        } catch (error) {
+          console.error("Mission submission status listener failed.", error);
+        }
+      }
+    }).finally(() => {
+      if (syncPromises.get(userId) === newJob) syncPromises.delete(userId);
+    });
+    syncPromises.set(userId, newJob);
+    job = newJob;
+  } else {
+    job.listeners.add(onStatusChange);
+  }
 
-  const sync = syncUserSubmissions(userId, onStatusChange).finally(() => {
-    syncPromises.delete(userId);
+  return job.promise.finally(() => {
+    job?.listeners.delete(onStatusChange);
   });
-  syncPromises.set(userId, sync);
-  return sync;
 }
 
 export async function deleteMissionSubmissionsForUser(userId: string): Promise<void> {

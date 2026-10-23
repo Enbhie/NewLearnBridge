@@ -53,7 +53,7 @@ Grade 2 learners can open quarter-based online lessons from the Lesson Board. Re
 
 ## Parent mission photo review
 
-Kindergarten missions **Count the Items**, **First Letter**, and **Letter Tracing** send the selected photo to the verified email address on the signed-in parent/guardian account. The child then sees a waiting screen until the parent approves the work or asks for another photo. This flow requires Firebase Cloud Functions, Firestore, Storage, and a Resend account; it will not send email until the backend is deployed and configured.
+Photo-based offline missions let the child take or choose a photo and save it on the device. If the device has no internet, the submission stays **Pending Upload**; it is retried when connectivity returns or the app is reopened. When online, the app uploads the photo and emails the verified parent/guardian account with a private review link. The parent confirms the work or asks for another photo, and an approval marks the mission complete. This flow requires deployed Firebase Cloud Functions, Firestore, Storage, and a configured Resend account; it will not send email until the backend is deployed and configured.
 
 1. In Firebase, enable Cloud Firestore and Cloud Storage, and upgrade the project to the Blaze plan if Firebase requires it for Cloud Functions.
 2. Install the Firebase CLI, sign in, and select the same project used by `.env.local`:
