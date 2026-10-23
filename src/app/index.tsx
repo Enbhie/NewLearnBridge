@@ -226,6 +226,7 @@ const SCREEN_TIME_STORAGE_PREFIX = "learnbridge.screenTime.";
 const LESSON_PROGRESS_STORAGE_PREFIX = "learnbridge.lessonProgress.";
 const EYE_BREAK_INTERVAL_SECONDS = 15 * 60;
 const EYE_BREAK_DURATION_SECONDS = 5 * 60;
+const LEGAL_POLICY_VERSION = "1.0";
 const DEFAULT_PREFERENCES: AccountPreferences = {
   difficulty: "standard",
   notificationsEnabled: false,
@@ -253,6 +254,10 @@ type StoredLearnerProfiles = {
   profiles: LearnerProfile[];
   activeProfileId: string | null;
   updatedAt?: number;
+  legalConsent?: {
+    policyVersion: string;
+    acceptedAt: string;
+  };
 };
 
 function getLocalDateStamp(date = new Date()): string {
@@ -340,6 +345,17 @@ function isLearnerProfile(value: unknown): value is LearnerProfile {
   );
 }
 
+function isLegalConsentRecord(
+  value: unknown
+): value is NonNullable<StoredLearnerProfiles["legalConsent"]> {
+  if (!value || typeof value !== "object") return false;
+  const consent = value as Record<string, unknown>;
+  return (
+    typeof consent.policyVersion === "string" &&
+    typeof consent.acceptedAt === "string"
+  );
+}
+
 function parseStoredLearnerProfiles(value: unknown, userId: string): StoredLearnerProfiles {
   if (!value || typeof value !== "object") {
     throw new Error("Saved child profiles have an invalid format.");
@@ -376,6 +392,9 @@ function parseStoredLearnerProfiles(value: unknown, userId: string): StoredLearn
     ...(typeof stored.updatedAt === "number" && Number.isFinite(stored.updatedAt)
       ? { updatedAt: stored.updatedAt }
       : {}),
+    ...(isLegalConsentRecord(stored.legalConsent)
+      ? { legalConsent: stored.legalConsent }
+      : {}),
   };
 }
 
@@ -394,7 +413,26 @@ function syncPendingLearnerProfiles(userId: string): Promise<void> {
       if (!pendingProfiles) return;
 
       const stored = parseStoredLearnerProfiles(JSON.parse(pendingProfiles), userId);
-      await setDoc(doc(database, "users", userId, "learnerProfiles", "current"), stored);
+      const profileRef = doc(database, "users", userId, "learnerProfiles", "current");
+      const cloudSnapshot = await getDoc(profileRef);
+      const cloudStored = cloudSnapshot.exists()
+        ? parseStoredLearnerProfiles(cloudSnapshot.data(), userId)
+        : null;
+      const pendingShouldWin =
+        stored.profiles.length > 0 &&
+        (!cloudStored ||
+          cloudStored.profiles.length === 0 ||
+          (stored.updatedAt ?? 0) >= (cloudStored.updatedAt ?? 0));
+      const profilesToKeep =
+        cloudStored && !pendingShouldWin ? cloudStored : stored;
+
+      if (profilesToKeep === stored) {
+        await setDoc(profileRef, stored);
+      }
+      await AsyncStorage.setItem(
+        `${PROFILE_STORAGE_PREFIX}${userId}`,
+        JSON.stringify(profilesToKeep)
+      );
       if (await AsyncStorage.getItem(pendingKey) === pendingProfiles) {
         await AsyncStorage.removeItem(pendingKey);
       }
@@ -406,6 +444,17 @@ function syncPendingLearnerProfiles(userId: string): Promise<void> {
   });
   learnerProfileSyncQueues.set(userId, queuedSync);
   return queuedSync;
+}
+
+function queueLearnerProfileSync(
+  userId: string,
+  profiles: StoredLearnerProfiles
+): Promise<void> {
+  const serialized = JSON.stringify(profiles);
+  return AsyncStorage.multiSet([
+    [`${PROFILE_STORAGE_PREFIX}${userId}`, serialized],
+    [`${PROFILE_STORAGE_PREFIX}${userId}${PROFILE_PENDING_SYNC_SUFFIX}`, serialized],
+  ]).then(() => syncPendingLearnerProfiles(userId));
 }
 
 // --- HELPER COMPONENTS (OUTSIDE APP) ---
@@ -865,7 +914,8 @@ function SignUpScreen({
   onRegister: (
     profile: LearnerProfile,
     email: string,
-    password: string
+    password: string,
+    legalConsent: { policyVersion: string; acceptedAt: string }
   ) => Promise<void>;
 }) {
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -875,6 +925,9 @@ function SignUpScreen({
   const [birthdateYear, setBirthdateYear] = useState(initialYear);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formMessage, setFormMessage] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsError, setTermsError] = useState("");
+  const [showLegalNotice, setShowLegalNotice] = useState(false);
   const { isOffline, checkInternet } = useInternetRequirement();
   const [fieldErrors, setFieldErrors] = useState<Record<SignUpField, string>>({
     name: "",
@@ -938,7 +991,12 @@ function SignUpScreen({
     }
 
     setFieldErrors(errors);
+    setTermsError(termsAccepted ? "" : "A parent or guardian must accept the terms and privacy notice.");
     if (Object.values(errors).some(Boolean)) {
+      setFormMessage("");
+      return;
+    }
+    if (!termsAccepted) {
       setFormMessage("");
       return;
     }
@@ -965,7 +1023,11 @@ function SignUpScreen({
           selectedIcon,
         },
         parentEmail.trim(),
-        signUpPassword
+        signUpPassword,
+        {
+          policyVersion: LEGAL_POLICY_VERSION,
+          acceptedAt: new Date().toISOString(),
+        }
       );
     } catch (error) {
       if (firebaseConfigured) {
@@ -1147,6 +1209,43 @@ function SignUpScreen({
               ) : null}
             </View>
 
+            <View style={styles.legalConsentContainer}>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: termsAccepted }}
+                accessibilityLabel="I agree to the Terms and Conditions and acknowledge the Data Privacy Notice"
+                onPress={() => {
+                  setTermsAccepted((accepted) => !accepted);
+                  setTermsError("");
+                }}
+                style={styles.legalCheckboxRow}
+              >
+                <View style={[styles.legalCheckbox, termsAccepted && styles.legalCheckboxChecked]}>
+                  {termsAccepted ? <Text style={styles.legalCheckboxMark}>✓</Text> : null}
+                </View>
+                <Text style={styles.legalConsentText}>
+                  I am the parent/guardian or an authorized adult. I agree to the Terms &amp; Conditions and acknowledge the Data Privacy Notice (RA 10173).
+                </Text>
+              </Pressable>
+              {termsError ? <Text style={styles.fieldError}>{termsError}</Text> : null}
+              <View style={styles.legalLinksRow}>
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => setShowLegalNotice(true)}
+                  style={styles.legalLinkButton}
+                >
+                  <Text style={styles.legalLink}>Terms &amp; Conditions</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => setShowLegalNotice(true)}
+                  style={styles.legalLinkButton}
+                >
+                  <Text style={styles.legalLink}>Privacy Notice · RA 10173</Text>
+                </Pressable>
+              </View>
+            </View>
+
             <Pressable
               style={styles.submitButton}
               onPress={() => void handleRegister()}
@@ -1183,7 +1282,89 @@ function SignUpScreen({
         visible={isOffline}
         onCheckInternet={checkInternet}
       />
+      <LegalNoticeModal
+        visible={showLegalNotice}
+        onClose={() => setShowLegalNotice(false)}
+      />
     </KeyboardAvoidingView>
+  );
+}
+
+function LegalNoticeModal({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <SafeAreaView style={styles.legalModal}>
+        <View style={styles.legalModalHeader}>
+          <Text style={styles.legalModalTitle}>Terms &amp; Data Privacy Notice</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close legal notice"
+            onPress={onClose}
+            style={styles.legalCloseButton}
+          >
+            <Text style={styles.legalCloseText}>Close</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.legalModalContent}>
+          <Text style={styles.legalUpdated}>LearnBridge · Version {LEGAL_POLICY_VERSION}</Text>
+          <Text style={styles.legalHeading}>Terms &amp; Conditions</Text>
+          <Text style={styles.legalParagraph}>
+            LearnBridge provides educational lessons, quizzes, and family learning activities. A parent or guardian must create and manage an account for a child. You are responsible for keeping the parent account credentials secure and for supervising a child’s use of the app.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            Use the app for lawful educational purposes. Do not misuse the service, attempt to access another person’s account, upload harmful or unlawful content, or disrupt the service. Learning content is provided for practice and is not a substitute for a teacher’s or caregiver’s judgment.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            Some features require internet access. Offline missions and locally saved progress may remain on this device and will sync when a connection is available. Availability of online features depends on the device, network, and service providers.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            The app is provided as available. To the extent permitted by applicable law, LearnBridge is not responsible for temporary service interruptions or loss caused by device failure, network providers, or third-party services. These terms do not limit rights that cannot legally be limited.
+          </Text>
+          <Text style={styles.legalHeading}>Data Privacy Notice — Philippines RA 10173</Text>
+          <Text style={styles.legalParagraph}>
+            LearnBridge handles personal information in accordance with applicable privacy requirements, including the Philippines Data Privacy Act of 2012 (Republic Act No. 10173) and its regulations. The parent or guardian gives consent for the child information entered into the app and may withdraw consent or request access, correction, or deletion, subject to legal and operational requirements.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            We collect the parent/guardian email for account sign-in and verification; the child’s name, birthdate, avatar, and grade to create a learner profile; and lesson, quiz, and mission progress to provide and restore learning features. If a parent or child chooses a photo mission, the selected image and submission details may be stored and sent for the configured parent-review workflow.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            Information is used to operate accounts, provide learning features, save and synchronize progress, support parent review, protect the service, and respond to support requests. We do not sell personal information or use it for third-party advertising.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            Account and cloud profile data are processed using Google Firebase services configured for this project, including Firebase Authentication and Cloud Firestore; mission images may use Firebase Storage. Some app settings and queued offline data are stored on the device. Google may process data as a service provider under its applicable terms and privacy documentation.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            We retain account information while the account is active and as needed to provide the service, meet legal obligations, resolve disputes, and protect the app. A parent/guardian can request account deletion in Account Settings; deletion removes associated app data where supported, subject to required backups or retention obligations. Device-local data may also need to be cleared from the device.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            We apply reasonable safeguards to protect information, but no electronic service can guarantee absolute security. Do not enter sensitive information that is not requested by the app.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            Privacy contact: [LearnBridge operator — replace before release], [privacy-contact@example.com — replace before release]. Do not publish this notice until the operator and a monitored privacy contact are provided and the notice is reviewed for the actual data practices and applicable law.
+          </Text>
+          <Text style={styles.legalParagraph}>
+            By checking the box during registration, the parent/guardian confirms authority to provide the child’s information and agrees to these Terms &amp; Conditions and acknowledges this Data Privacy Notice.
+          </Text>
+        </ScrollView>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onClose}
+          style={styles.legalAcceptButton}
+        >
+          <Text style={styles.submitButtonText}>Done</Text>
+        </Pressable>
+      </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -2394,6 +2575,10 @@ function GradeSetupTutorialScreen({
 // --- MAIN APP COMPONENT ---
 
 export default function App() {
+  const networkState = Network.useNetworkState();
+  const deviceOffline =
+    networkState.isConnected === false ||
+    networkState.isInternetReachable === false;
   const [screen, setScreen] = useState<Screen>("home");
   const setCloudBackdropVisible = useContext(CloudBackdropVisibilityContext);
   const { setDarkMode } = useContext(AppAppearanceContext);
@@ -2423,6 +2608,8 @@ export default function App() {
   const [parentEmail, setParentEmail] = useState("");
   const [signUpPassword, setSignUpPassword] = useState("");
   const [selectedIcon, setSelectedIcon] = useState("🦉");
+  const [legalConsent, setLegalConsent] =
+    useState<StoredLearnerProfiles["legalConsent"]>();
   const [preferences, setPreferences] = useState<AccountPreferences>(DEFAULT_PREFERENCES);
   const [preferencesReady, setPreferencesReady] = useState(false);
 
@@ -2463,6 +2650,7 @@ export default function App() {
         setProfilesReady(true);
         setChildProfiles([]);
         setActiveProfileId(null);
+        setLegalConsent(undefined);
         return;
       }
 
@@ -2510,82 +2698,68 @@ export default function App() {
           activeProfileId: null,
         };
         let cloudSyncError: unknown;
-        const pendingProfileSync = await AsyncStorage.getItem(
-          `${PROFILE_STORAGE_PREFIX}${user.uid}${PROFILE_PENDING_SYNC_SUFFIX}`
-        );
-        if (pendingProfileSync) {
-          stored = parseStoredLearnerProfiles(JSON.parse(pendingProfileSync), user.uid);
-          void syncPendingLearnerProfiles(user.uid).catch((error: unknown) => {
-            if (auth?.currentUser?.uid === user.uid) {
-              Alert.alert(
-                "Profile saved on this device",
-                `Cloud sync will retry when a connection is available. ${
-                  error instanceof Error ? error.message : ""
-                }`
-              );
-            }
-          });
-        } else {
-          try {
-            const cloudProfileSnapshot = await getDoc(profileRef);
-            if (auth?.currentUser?.uid !== user.uid) return;
-            if (cloudProfileSnapshot.exists()) {
-              const cloudStored = parseStoredLearnerProfiles(
-                cloudProfileSnapshot.data(),
-                user.uid
-              );
-              if (
-                localStored &&
-                (localStored.updatedAt ?? 0) > (cloudStored.updatedAt ?? 0)
-              ) {
-                stored = localStored;
-                profileWriteQueueRef.current = profileWriteQueueRef.current
-                  .catch(() => undefined)
-                  .then(() => setDoc(profileRef, stored));
-                void profileWriteQueueRef.current.catch((error: unknown) => {
-                  if (auth?.currentUser?.uid === user.uid) {
-                    Alert.alert(
-                      "Profile saved on this device",
-                      `Your child profile could not sync to your account. ${
-                        error instanceof Error ? error.message : ""
-                      }`
-                    );
-                  }
-                });
-              } else {
-                stored = cloudStored;
-                const cloudData = JSON.stringify(stored);
-                if (cloudData !== localProfile) {
-                  void AsyncStorage.setItem(storageKey, cloudData).catch(
-                    (error: unknown) => {
-                      console.warn("Could not cache the cloud learner profile.", error);
-                    }
-                  );
-                }
-              }
+        const pendingKey = `${PROFILE_STORAGE_PREFIX}${user.uid}${PROFILE_PENDING_SYNC_SUFFIX}`;
+        const pendingProfile = await AsyncStorage.getItem(pendingKey);
+        const pendingStored = pendingProfile
+          ? parseStoredLearnerProfiles(JSON.parse(pendingProfile), user.uid)
+          : null;
+        if (
+          pendingStored &&
+          (!localStored || (pendingStored.updatedAt ?? 0) >= (localStored.updatedAt ?? 0))
+        ) {
+          stored = pendingStored;
+        }
+
+        try {
+          const cloudProfileSnapshot = await getDoc(profileRef);
+          if (auth?.currentUser?.uid !== user.uid) return;
+          if (cloudProfileSnapshot.exists()) {
+            const cloudStored = parseStoredLearnerProfiles(
+              cloudProfileSnapshot.data(),
+              user.uid
+            );
+            const localShouldWin =
+              stored.profiles.length > 0 &&
+              (cloudStored.profiles.length === 0 ||
+                (stored.updatedAt ?? 0) >= (cloudStored.updatedAt ?? 0));
+            if (localShouldWin) {
+              void queueLearnerProfileSync(user.uid, stored).catch((error: unknown) => {
+                console.warn("Could not sync the saved learner profile.", error);
+              });
             } else {
-              if (stored.profiles.length > 0) {
-                profileWriteQueueRef.current = profileWriteQueueRef.current
-                  .catch(() => undefined)
-                  .then(() => setDoc(profileRef, stored));
-                void profileWriteQueueRef.current.catch((error: unknown) => {
-                  if (auth?.currentUser?.uid === user.uid) {
-                    Alert.alert(
-                      "Profile saved on this device",
-                      `Your child profile could not sync to your account. ${
-                        error instanceof Error ? error.message : ""
-                      }`
-                    );
+              stored = cloudStored;
+              const cloudData = JSON.stringify(stored);
+              if (cloudData !== localProfile) {
+                void AsyncStorage.setItem(storageKey, cloudData).catch(
+                  (error: unknown) => {
+                    console.warn("Could not cache the cloud learner profile.", error);
                   }
+                );
+              }
+              if (
+                pendingProfile &&
+                (await AsyncStorage.getItem(pendingKey)) === pendingProfile
+              ) {
+                void AsyncStorage.removeItem(pendingKey).catch((error: unknown) => {
+                  console.warn("Could not clear the synced learner profile.", error);
                 });
               }
             }
-          } catch (error) {
-            if (auth?.currentUser?.uid !== user.uid) return;
-            cloudSyncError = error;
-            if (!localStored) {
-              throw error;
-            }
+          } else if (stored.profiles.length > 0) {
+            void queueLearnerProfileSync(user.uid, stored).catch((error: unknown) => {
+              console.warn("Could not sync the saved learner profile.", error);
+            });
+          }
+        } catch (error) {
+          if (auth?.currentUser?.uid !== user.uid) return;
+          cloudSyncError = error;
+          if (!localStored && !pendingStored) {
+            throw error;
+          }
+          if (stored.profiles.length > 0) {
+            void queueLearnerProfileSync(user.uid, stored).catch((syncError: unknown) => {
+              console.warn("Saved learner profile is queued for cloud sync.", syncError);
+            });
           }
         }
 
@@ -2596,6 +2770,7 @@ export default function App() {
         if (auth?.currentUser?.uid !== user.uid) return;
         setChildProfiles(stored.profiles);
         setActiveProfileId(stored.activeProfileId);
+        setLegalConsent(stored.legalConsent);
         const activeProfile = stored.profiles.find(
           (profile) => profile.id === stored.activeProfileId
         );
@@ -2606,12 +2781,7 @@ export default function App() {
         }
         setProfilesReady(true);
         if (cloudSyncError) {
-          Alert.alert(
-            "Child profile restored on this device",
-            `Your saved profile is available, but it could not sync with your account. Check your internet connection and try again. ${
-              cloudSyncError instanceof Error ? cloudSyncError.message : ""
-            }`
-          );
+          console.warn("Using the saved local learner profile while cloud access is unavailable.", cloudSyncError);
         }
       })().catch((error: unknown) => {
         if (auth?.currentUser?.uid === user.uid) {
@@ -2649,10 +2819,7 @@ export default function App() {
       if (!userId) return;
       void syncPendingLearnerProfiles(userId).catch((error: unknown) => {
         if (currentAuth.currentUser?.uid === userId) {
-          Alert.alert(
-            "Profile sync pending",
-            error instanceof Error ? error.message : "Cloud sync will retry when a connection is available."
-          );
+          console.warn("Learner profile sync will retry when the connection is available.", error);
         }
       });
     });
@@ -2894,6 +3061,7 @@ export default function App() {
       profiles,
       activeProfileId: profileId,
       updatedAt: Date.now(),
+      ...(legalConsent ? { legalConsent } : {}),
     };
     const serializedData = JSON.stringify(data);
     await AsyncStorage.multiSet([
@@ -3110,7 +3278,8 @@ export default function App() {
   const handleRegister = async (
     profile: LearnerProfile,
     registerEmail: string,
-    registerPassword: string
+    registerPassword: string,
+    acceptedConsent: { policyVersion: string; acceptedAt: string }
   ) => {
     try {
       const { user } = await createUserWithEmailAndPassword(
@@ -3125,24 +3294,29 @@ export default function App() {
         profiles: [profile],
         activeProfileId: profile.id,
         updatedAt: Date.now(),
+        legalConsent: acceptedConsent,
       };
-      await AsyncStorage.setItem(
-        `${PROFILE_STORAGE_PREFIX}${user.uid}`,
-        JSON.stringify(profiles)
-      );
-      await setDoc(
-        doc(firestore, "users", user.uid, "learnerProfiles", "current"),
-        profiles
-      );
+      const serializedProfiles = JSON.stringify(profiles);
+      await AsyncStorage.multiSet([
+        [`${PROFILE_STORAGE_PREFIX}${user.uid}`, serializedProfiles],
+        [
+          `${PROFILE_STORAGE_PREFIX}${user.uid}${PROFILE_PENDING_SYNC_SUFFIX}`,
+          serializedProfiles,
+        ],
+      ]);
       setFirebaseUser(user);
       setChildProfiles([profile]);
       setActiveProfileId(profile.id);
+      setLegalConsent(acceptedConsent);
       setChildName(profile.childName);
       setChildBirthdate(profile.childBirthdate);
       setSelectedIcon(profile.selectedIcon);
       setPreferences(DEFAULT_PREFERENCES);
       setParentEmail(registerEmail);
       setScreen("verify-email");
+      void syncPendingLearnerProfiles(user.uid).catch((error: unknown) => {
+        console.warn("New learner profile is saved locally and will sync when possible.", error);
+      });
 
       try {
         await sendEmailVerification(user);
@@ -3529,7 +3703,7 @@ export default function App() {
         privacyMode={preferences.privacyMode}
         completedLessonIds={completedLessonIds}
         lessonProgressReady={lessonProgressReady}
-        offlineMode={preferences.offlineMode}
+        offlineMode={preferences.offlineMode || deviceOffline}
         grade={childGrade}
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
@@ -3830,7 +4004,7 @@ const styles = StyleSheet.create({
   offlineMissionEmoji: { fontSize: 28 },
   offlineCopy: { flex: 1, paddingRight: 4 },
   missionCardHeading: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
-  openMissionsButton: { alignSelf: "flex-start", backgroundColor: "#FFFFFF", borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, marginTop: 14 },
+  openMissionsButton: { alignSelf: "flex-end", backgroundColor: "#FFFFFF", borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, marginTop: 14 },
   cardBody: { color: "#36566A", fontSize: 15, lineHeight: 22 },
   openButton: { color: "#173B53", fontWeight: "800", fontSize: 14 },
   pageTitle: { color: "#173B53", fontSize: 28, fontWeight: "900", textAlign: "center", marginBottom: 6 },
@@ -3938,6 +4112,25 @@ const styles = StyleSheet.create({
   authMascotTitle: { color: "#173B53", fontSize: 15, fontWeight: "900" },
   authMascotMessage: { color: "#36566A", fontSize: 14, lineHeight: 20, marginTop: 3 },
   formContainer: { backgroundColor: "#FFF8E7", borderRadius: 22, padding: 20, shadowColor: "#24546A", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.13, shadowRadius: 6, elevation: 3 },
+  legalConsentContainer: { marginTop: 2, marginBottom: 18 },
+  legalCheckboxRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  legalCheckbox: { width: 22, height: 22, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#759B57", borderRadius: 5, backgroundColor: "#FFFFFF", marginTop: 1 },
+  legalCheckboxChecked: { backgroundColor: "#759B57" },
+  legalCheckboxMark: { color: "#FFFFFF", fontSize: 16, lineHeight: 18, fontWeight: "900" },
+  legalConsentText: { flex: 1, color: "#4A2F22", fontSize: 13, lineHeight: 19 },
+  legalLink: { color: "#2B6580", textDecorationLine: "underline", fontWeight: "800" },
+  legalLinksRow: { flexDirection: "row", flexWrap: "wrap", gap: 14, marginTop: 8, marginLeft: 32 },
+  legalLinkButton: { paddingVertical: 4 },
+  legalModal: { flex: 1, backgroundColor: "#FFFDF5", padding: 18 },
+  legalModalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "#DCE8CE" },
+  legalModalTitle: { flex: 1, color: "#173B53", fontSize: 20, fontWeight: "900" },
+  legalCloseButton: { minHeight: 40, justifyContent: "center", paddingHorizontal: 12 },
+  legalCloseText: { color: "#2B6580", fontWeight: "800" },
+  legalModalContent: { paddingVertical: 18, gap: 12 },
+  legalUpdated: { color: "#65756C", fontSize: 12, fontWeight: "700" },
+  legalHeading: { color: "#173B53", fontSize: 18, lineHeight: 24, fontWeight: "900", marginTop: 5 },
+  legalParagraph: { color: "#354D58", fontSize: 14, lineHeight: 21 },
+  legalAcceptButton: { minHeight: 50, alignItems: "center", justifyContent: "center", backgroundColor: "#759B57", borderRadius: 12, marginTop: 8 },
   inputGroup: { marginBottom: 16 },
   inputLabel: { color: "#4A2F22", fontSize: 14, fontWeight: "700", marginBottom: 6 },
   inputHint: { color: "#766B5D", fontSize: 12, lineHeight: 17, marginTop: 5 },
