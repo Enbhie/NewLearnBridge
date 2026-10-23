@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isRunningInExpoGo } from "expo";
+import * as Network from "expo-network";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
@@ -60,6 +61,13 @@ import LessonScreen from "../components/LessonScreen";
 import QuizScreen from "../components/QuizScreen";
 import ResultsScreen from "../components/ResultsScreen";
 import { getCompletedMissions, markMissionComplete } from "../data/missionProgress";
+import {
+  deleteMissionSubmissionsForUser,
+  getMissionSubmissions,
+  saveMissionPhotoSubmission,
+  syncMissionSubmissions,
+  type OfflineMissionSubmission,
+} from "../data/offlineMissionSubmissionQueue";
 import {
   listenToMissionReview,
   submitMissionPhotoForReview,
@@ -175,6 +183,7 @@ type Mission = {
 };
 
 function requiresParentEmailReview(mission: OfflineMission): boolean {
+  return mission.submission === "photo";
   return mission.grade === "2" || ["K-3", "K-4", "K-5"].includes(mission.id);
 }
 
@@ -1571,15 +1580,96 @@ function MenuScreen({
   const [isPickingPhoto, setIsPickingPhoto] = useState(false);
   const [isSubmittingPhoto, setIsSubmittingPhoto] = useState(false);
   const [pendingReview, setPendingReview] = useState<MissionReview | null>(null);
+  const [isPendingReviewDismissed, setIsPendingReviewDismissed] = useState(false);
+  const [submissions, setSubmissions] = useState<OfflineMissionSubmission[]>([]);
   const [reviewError, setReviewError] = useState("");
   const [isRestoringReview, setIsRestoringReview] = useState(true);
   const restoredReviewRef = useRef(false);
   const reviewStorageKey = auth?.currentUser
     ? `learnbridge.pending-mission-review.${auth.currentUser.uid}`
     : null;
+  const userId = auth?.currentUser?.uid ?? null;
 
   const gradeMissions = getMissionsForGrade(grade);
   const areaIcons = { Math: "🔢", Science: "🔬", "Reading & Writing": "📖" };
+  const refreshSubmissions = useCallback(async () => {
+    if (!userId) {
+      setSubmissions([]);
+      return;
+    }
+    setSubmissions(await getMissionSubmissions(userId));
+  }, [userId]);
+
+  const syncSubmissions = useCallback(async () => {
+    if (!userId) return;
+    await syncMissionSubmissions(userId, (submission) => {
+      setSubmissions((current) => [
+        submission,
+        ...current.filter((item) => item.id !== submission.id),
+      ]);
+      if (submission.status === "submitted_successfully") {
+        restoredReviewRef.current = true;
+        const review: MissionReview = {
+          id: submission.id,
+          missionId: submission.missionId,
+          status: "pending",
+        };
+        setPendingReview(review);
+        setIsPendingReviewDismissed(false);
+        if (reviewStorageKey) {
+          void AsyncStorage.setItem(reviewStorageKey, JSON.stringify(review)).catch(
+            (error: unknown) => {
+              setReviewError(
+                error instanceof Error
+                  ? `The submission was sent, but the review status could not be saved on this device: ${error.message}`
+                  : "The submission was sent, but the review status could not be saved on this device."
+              );
+            }
+          );
+        }
+      }
+    });
+    await refreshSubmissions();
+  }, [refreshSubmissions, reviewStorageKey, userId]);
+
+  useEffect(() => {
+    let active = true;
+    void refreshSubmissions().catch((error: unknown) => {
+      if (active) {
+        setMissionError(
+          error instanceof Error
+            ? `Could not load saved mission submissions: ${error.message}`
+            : "Could not load saved mission submissions."
+        );
+      }
+    });
+    void syncSubmissions().catch((error: unknown) => {
+      if (active) {
+        setMissionError(
+          error instanceof Error
+            ? `Could not synchronize saved mission submissions: ${error.message}`
+            : "Could not synchronize saved mission submissions."
+        );
+      }
+    });
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (state.isConnected === true && state.isInternetReachable !== false) {
+        void syncSubmissions().catch((error: unknown) => {
+          if (active) {
+            setMissionError(
+              error instanceof Error
+                ? `Could not synchronize saved mission submissions: ${error.message}`
+                : "Could not synchronize saved mission submissions."
+            );
+          }
+        });
+      }
+    });
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [refreshSubmissions, syncSubmissions]);
 
   // reload checkmarks whenever this screen is shown (e.g. back from the scanner)
   useFocusEffect(
@@ -1612,6 +1702,7 @@ function MenuScreen({
             parsed.status === "needs_revision")
         ) {
           restoredReviewRef.current = true;
+          setIsPendingReviewDismissed(false);
           setPendingReview({
             id: parsed.id,
             missionId: parsed.missionId,
@@ -1680,6 +1771,18 @@ function MenuScreen({
     };
   }, [pendingReview?.missionId, pendingReview?.status]);
 
+  useEffect(() => {
+    if (pendingReview?.status === "approved" && userId) {
+      void syncSubmissions().catch((error: unknown) => {
+        setMissionError(
+          error instanceof Error
+            ? `Could not synchronize the next saved mission: ${error.message}`
+            : "Could not synchronize the next saved mission."
+        );
+      });
+    }
+  }, [pendingReview?.status, syncSubmissions, userId]);
+
   const closeCheck = () => {
     setPending(null);
     setPhotoUri(null);
@@ -1700,30 +1803,27 @@ function MenuScreen({
       setIsSubmittingPhoto(true);
       setMissionError("");
       try {
-        const review = await submitMissionPhotoForReview(
+        if (!userId) throw new Error("Sign in before saving a mission submission.");
+        const submission = await saveMissionPhotoSubmission(
+          userId,
           pending.id,
           photoUri!,
           photoContentType
         );
-        setPendingReview(review);
-        if (reviewStorageKey) {
-          try {
-            await AsyncStorage.setItem(reviewStorageKey, JSON.stringify(review));
-          } catch (error) {
-            setReviewError(
-              error instanceof Error
-                ? `The photo was emailed, but the pending review could not be saved on this device: ${error.message}`
-                : "The photo was emailed, but the pending review could not be saved on this device."
-            );
-          }
-        }
-        restoredReviewRef.current = true;
+        setSubmissions((current) => [submission, ...current]);
         closeCheck();
+        void syncSubmissions().catch((error: unknown) => {
+          setMissionError(
+            error instanceof Error
+              ? `Saved offline. Synchronization will retry when the connection is available: ${error.message}`
+              : "Saved offline. Synchronization will retry when the connection is available."
+          );
+        });
       } catch (error) {
         setMissionError(
           error instanceof Error
-            ? error.message
-            : "Could not send the mission to your parent. Please try again."
+            ? `Could not save the submission on this device: ${error.message}`
+            : "Could not save the submission on this device. Please try again."
         );
       } finally {
         setIsSubmittingPhoto(false);
@@ -1819,6 +1919,20 @@ function MenuScreen({
     }
   };
 
+  const latestSubmissionByMission = new Map<string, OfflineMissionSubmission>();
+  for (const submission of submissions) {
+    if (!latestSubmissionByMission.has(submission.missionId)) {
+      latestSubmissionByMission.set(submission.missionId, submission);
+    }
+  }
+  const submissionStatusLabels: Record<OfflineMissionSubmission["status"], string> = {
+    saved_offline: "Saved Offline",
+    pending_upload: "Pending Upload",
+    uploading: "Uploading",
+    submitted_successfully: "Submitted Successfully",
+    upload_failed: "Upload Failed — will retry when online",
+  };
+
   if (isRestoringReview) {
     return (
       <SafeAreaView style={styles.missionPendingPage}>
@@ -1903,9 +2017,15 @@ function MenuScreen({
         <Text style={styles.pageSubtitle}>
           Showing only {gradeLabels[grade]} missions. Pick one to try at home!
         </Text>
+        {missionError ? (
+          <Text accessibilityLiveRegion="polite" style={styles.missionInlineError}>
+            {missionError}
+          </Text>
+        ) : null}
 
         {gradeMissions.map((mission) => {
           const done = completed.includes(mission.id);
+          const latestSubmission = latestSubmissionByMission.get(mission.id);
           return (
             <View style={styles.missionCard} key={mission.id}>
               <View style={styles.missionHeading}>
@@ -1917,6 +2037,38 @@ function MenuScreen({
               </View>
               <Text style={styles.missionSkill}>📚 {mission.subject}</Text>
               <Text style={styles.cardBody}>{mission.task}</Text>
+              {latestSubmission ? (
+                <View style={styles.missionSubmissionStatus}>
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    style={styles.missionSubmissionStatusText}
+                  >
+                    Submission:{" "}
+                    {submissionStatusLabels[latestSubmission.status]}
+                  </Text>
+                  {latestSubmission.errorMessage ? (
+                    <Text style={styles.missionSubmissionError}>
+                      {latestSubmission.errorMessage}
+                    </Text>
+                  ) : null}
+                  {latestSubmission.status === "upload_failed" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        void syncSubmissions().catch((error: unknown) => {
+                          setMissionError(
+                            error instanceof Error
+                              ? `Could not retry the submission: ${error.message}`
+                              : "Could not retry the submission."
+                          );
+                        });
+                      }}
+                      style={styles.missionRetryUpload}
+                    >
+                      <Text style={styles.missionRetryUploadText}>RETRY UPLOAD</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               {mission.grade === "2" ? (
                 <Text style={styles.missionPhotoInstruction}>
                   📷 Take a photo of your work to send to your parent for approval.
@@ -2019,9 +2171,9 @@ function MenuScreen({
             >
               <Text style={styles.actionButtonText}>
                 {isSubmittingPhoto
-                  ? "SENDING TO PARENT..."
+                  ? "SAVING ON DEVICE..."
                   : pending && requiresParentEmailReview(pending)
-                    ? "SEND TO PARENT FOR APPROVAL"
+                    ? "SAVE SUBMISSION"
                     : "PARENT CONFIRMS ✓"}
               </Text>
             </Pressable>
@@ -2043,7 +2195,7 @@ function MenuScreen({
       </Modal>
 
       <Modal
-        visible={pendingReview?.status === "pending"}
+        visible={pendingReview?.status === "pending" && !isPendingReviewDismissed}
         animationType="fade"
         onRequestClose={() => undefined}
       >
@@ -2067,8 +2219,15 @@ function MenuScreen({
             </Text>
           ) : null}
           <Text style={styles.missionPendingHint}>
-            This screen will update automatically after your parent decides.
+            Your submission was received. This screen will update automatically after your parent decides.
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setIsPendingReviewDismissed(true)}
+            style={styles.missionContinueButton}
+          >
+            <Text style={styles.missionContinueButtonText}>CONTINUE TO MISSIONS</Text>
+          </Pressable>
         </SafeAreaView>
       </Modal>
 
@@ -2254,6 +2413,7 @@ export default function App() {
   const screenTimePersistenceRef = useRef<DailyScreenTimePersistence | null>(null);
   const profileWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const notificationsEnabledRef = useRef(preferences.notificationsEnabled);
+  const eyeRestEnabledRef = useRef(preferences.screenTimeLimitMinutes > 0);
 
   useEffect(() => {
     setBackgroundMusic(backgroundMusicTrack);
@@ -2486,6 +2646,10 @@ export default function App() {
   }, [preferences.notificationsEnabled]);
 
   useEffect(() => {
+    eyeRestEnabledRef.current = preferences.screenTimeLimitMinutes > 0;
+  }, [preferences.screenTimeLimitMinutes]);
+
+  useEffect(() => {
     const accountId = firebaseUser?.uid;
     if (!accountId) {
       screenTimePersistenceRef.current = null;
@@ -2570,7 +2734,16 @@ export default function App() {
         setEyeBreakSecondsRemaining(0);
       }
 
-      if (breakSeconds > 0) {
+      if (!eyeRestEnabledRef.current) {
+        focusSeconds = 0;
+        if (breakSeconds > 0) {
+          breakSeconds = 0;
+          setEyeBreakSecondsRemaining(0);
+          void persistUsage().catch((error: unknown) => {
+            console.warn("Could not save today's screen-time usage.", error);
+          });
+        }
+      } else if (breakSeconds > 0) {
         breakSeconds -= 1;
         setEyeBreakSecondsRemaining(breakSeconds);
         if (breakSeconds % 5 === 0) {
@@ -2582,30 +2755,32 @@ export default function App() {
       }
 
       usedSeconds += 1;
-      focusSeconds += 1;
       setScreenTimeUsedSeconds(usedSeconds);
-      if (focusSeconds >= EYE_BREAK_INTERVAL_SECONDS) {
-        focusSeconds = 0;
-        breakSeconds = EYE_BREAK_DURATION_SECONDS;
-        setEyeBreakSecondsRemaining(breakSeconds);
-        if (
-          notificationsEnabledRef.current &&
-          Platform.OS !== "web" &&
-          !isRunningInExpoGo()
-        ) {
-          void getNotificationsModule()
-            .then((Notifications) =>
-              Notifications?.scheduleNotificationAsync({
-                content: {
-                  title: "Eye-rest break",
-                  body: "Look away from the screen and relax your eyes for 5 minutes.",
-                },
-                trigger: null,
-              })
-            )
-            .catch((error: unknown) => {
-              console.warn("Could not schedule the eye-rest reminder.", error);
-            });
+      if (eyeRestEnabledRef.current) {
+        focusSeconds += 1;
+        if (focusSeconds >= EYE_BREAK_INTERVAL_SECONDS) {
+          focusSeconds = 0;
+          breakSeconds = EYE_BREAK_DURATION_SECONDS;
+          setEyeBreakSecondsRemaining(breakSeconds);
+          if (
+            notificationsEnabledRef.current &&
+            Platform.OS !== "web" &&
+            !isRunningInExpoGo()
+          ) {
+            void getNotificationsModule()
+              .then((Notifications) =>
+                Notifications?.scheduleNotificationAsync({
+                  content: {
+                    title: "Eye-rest break",
+                    body: "Look away from the screen and relax your eyes for 5 minutes.",
+                  },
+                  trigger: null,
+                })
+              )
+              .catch((error: unknown) => {
+                console.warn("Could not schedule the eye-rest reminder.", error);
+              });
+          }
         }
       }
       if (usedSeconds % 5 === 0) {
@@ -2700,7 +2875,15 @@ export default function App() {
     const profiles = childProfiles.map((profile) =>
       profile.id === profileId ? { ...profile, grade } : profile
     );
-    await persistLearnerProfiles(profiles, activeProfileId ?? profileId);
+    if (profiles.every((profile, index) => profile === childProfiles[index])) return;
+
+    setChildProfiles(profiles);
+    try {
+      await persistLearnerProfiles(profiles, activeProfileId ?? profileId);
+    } catch (error) {
+      setChildProfiles(childProfiles);
+      throw error;
+    }
   };
 
   const handleSaveChildGrade = async (grade: Grade) => {
@@ -2951,6 +3134,16 @@ export default function App() {
       }
 
       await deleteUser(user);
+      try {
+        await deleteMissionSubmissionsForUser(user.uid);
+      } catch (error) {
+        Alert.alert(
+          "Account removed",
+          error instanceof Error
+            ? `The local mission submissions could not be fully cleared: ${error.message}`
+            : "The local mission submissions could not be fully cleared."
+        );
+      }
       void Promise.all([
         AsyncStorage.removeItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`),
         AsyncStorage.removeItem(`${SETTINGS_STORAGE_PREFIX}${user.uid}`),
@@ -3006,6 +3199,12 @@ export default function App() {
       throw new Error(getAuthErrorMessage(error));
     }
 
+    let submissionCleanupError: unknown;
+    try {
+      await deleteMissionSubmissionsForUser(user.uid);
+    } catch (error) {
+      submissionCleanupError = error;
+    }
     void Promise.all([
       AsyncStorage.removeItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`),
       AsyncStorage.removeItem(`${SETTINGS_STORAGE_PREFIX}${user.uid}`),
@@ -3032,6 +3231,14 @@ export default function App() {
     setScreenTimeUsedSeconds(0);
     setEyeBreakSecondsRemaining(0);
     setScreen("home");
+    if (submissionCleanupError) {
+      Alert.alert(
+        "Account deleted",
+        submissionCleanupError instanceof Error
+          ? `The local mission submissions could not be fully cleared: ${submissionCleanupError.message}`
+          : "The local mission submissions could not be fully cleared."
+      );
+    }
   };
 
   const screenTimeLimitReached =
@@ -3158,7 +3365,7 @@ export default function App() {
     );
   }
 
-  if (eyeBreakSecondsRemaining > 0) {
+  if (eyeBreakSecondsRemaining > 0 && preferences.screenTimeLimitMinutes > 0) {
     return <EyeRestBreakScreen secondsRemaining={eyeBreakSecondsRemaining} />;
   }
 
@@ -3317,7 +3524,6 @@ export default function App() {
   if (screen === "kinder-lessons") {
     return (
       <KindergartenLessonsScreen
-        difficulty={preferences.difficulty}
         onBack={() => {
           setCurriculumCategory(null);
           setScreen("menu");
@@ -3565,6 +3771,11 @@ const styles = StyleSheet.create({
   successMessage: { color: "#397147", fontSize: 14, lineHeight: 20, fontWeight: "700", marginBottom: 12 },
   pageSubtitle: { color: "#36566A", fontSize: 16, lineHeight: 23, textAlign: "center", marginBottom: 18 },
   missionCard: { backgroundColor: "#FFFFFF", borderColor: "#FFFFFF", borderWidth: 2, borderRadius: 20, padding: 15, marginBottom: 14, shadowColor: "#24546A", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.13, shadowRadius: 4, elevation: 3 },
+  missionSubmissionStatus: { backgroundColor: "#EAF5F7", borderRadius: 10, marginBottom: 12, padding: 10 },
+  missionSubmissionStatusText: { color: "#173B53", fontSize: 13, fontWeight: "900" },
+  missionSubmissionError: { color: "#9C3E32", fontSize: 12, lineHeight: 17, marginTop: 4 },
+  missionRetryUpload: { alignSelf: "flex-start", backgroundColor: "#258EA3", borderRadius: 8, marginTop: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  missionRetryUploadText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   missionReviewContainer: { width: "100%", maxWidth: 460, maxHeight: "92%" },
   missionReviewScroll: { flexGrow: 1, justifyContent: "flex-end", alignItems: "flex-end", paddingVertical: 16 },
   missionPendingPage: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#EAF5F7", padding: 24 },
@@ -3575,6 +3786,8 @@ const styles = StyleSheet.create({
   missionPendingEmail: { color: "#173B53", fontSize: 14, lineHeight: 20, fontWeight: "800", textAlign: "center", marginTop: 10 },
   missionPendingSpinner: { marginTop: 24 },
   missionPendingHint: { color: "#526778", fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 14 },
+  missionContinueButton: { minHeight: 48, backgroundColor: "#258EA3", borderRadius: 12, alignItems: "center", justifyContent: "center", marginTop: 20, paddingHorizontal: 18 },
+  missionContinueButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   photoReviewHeading: { color: "#173B53", fontSize: 15, fontWeight: "900", marginTop: 6, marginBottom: 8, textAlign: "center" },
   missionPhotoInstruction: { color: "#397147", fontSize: 13, lineHeight: 19, fontWeight: "800", marginTop: 8 },
   missionPhotoPreview: { width: "100%", height: 220, borderRadius: 12, backgroundColor: "#EAF5F7", marginBottom: 10 },
