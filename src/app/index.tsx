@@ -2069,6 +2069,7 @@ function MenuScreen({
                     </Pressable>
                   ) : null}
                 </View>
+              ) : null}
               {mission.grade === "2" ? (
                 <Text style={styles.missionPhotoInstruction}>
                   📷 Take a photo of your work to send to your parent for approval.
