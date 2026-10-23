@@ -252,6 +252,7 @@ type StoredLearnerProfiles = {
   version: 2;
   profiles: LearnerProfile[];
   activeProfileId: string | null;
+  updatedAt?: number;
 };
 
 function getLocalDateStamp(date = new Date()): string {
@@ -368,7 +369,14 @@ function parseStoredLearnerProfiles(value: unknown, userId: string): StoredLearn
       ? stored.activeProfileId
       : profiles[0]?.id ?? null;
 
-  return { version: 2, profiles, activeProfileId };
+  return {
+    version: 2,
+    profiles,
+    activeProfileId,
+    ...(typeof stored.updatedAt === "number" && Number.isFinite(stored.updatedAt)
+      ? { updatedAt: stored.updatedAt }
+      : {}),
+  };
 }
 
 const learnerProfileSyncQueues = new Map<string, Promise<void>>();
@@ -2091,6 +2099,7 @@ function MenuScreen({
                     </Pressable>
                   ) : null}
                 </View>
+              ) : null}
               {mission.grade === "2" ? (
                 <Text style={styles.missionPhotoInstruction}>
                   📷 Take a photo of your work to send to your parent for approval.
@@ -2433,6 +2442,7 @@ export default function App() {
   const [screenTimeReady, setScreenTimeReady] = useState(false);
   const [eyeBreakSecondsRemaining, setEyeBreakSecondsRemaining] = useState(0);
   const screenTimePersistenceRef = useRef<DailyScreenTimePersistence | null>(null);
+  const profileWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const notificationsEnabledRef = useRef(preferences.notificationsEnabled);
   const eyeRestEnabledRef = useRef(preferences.screenTimeLimitMinutes > 0);
 
@@ -2502,6 +2512,87 @@ export default function App() {
             const localProfile = await AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`);
             if (!localProfile) {
               throw error;
+        const storageKey = `${PROFILE_STORAGE_PREFIX}${user.uid}`;
+        const localProfile = await AsyncStorage.getItem(storageKey);
+        const localStored: StoredLearnerProfiles | null = localProfile
+          ? parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid)
+          : null;
+
+        if (auth?.currentUser?.uid !== user.uid) return;
+        if (localStored) {
+          setChildProfiles(localStored.profiles);
+          setActiveProfileId(localStored.activeProfileId);
+          const localActiveProfile = localStored.profiles.find(
+            (profile) => profile.id === localStored.activeProfileId
+          );
+          if (localActiveProfile) {
+            setChildName(localActiveProfile.childName);
+            setChildBirthdate(localActiveProfile.childBirthdate);
+            setSelectedIcon(localActiveProfile.selectedIcon);
+          }
+          setProfilesReady(true);
+          if (user.emailVerified) {
+            setScreen((currentScreen) => {
+              const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
+              if (!canRedirect) return currentScreen;
+              return localActiveProfile?.grade ? "menu" : "grade-selection";
+            });
+          }
+        }
+
+        try {
+          const cloudProfile = await getDoc(profileRef);
+          if (auth?.currentUser?.uid !== user.uid) return;
+          let stored: StoredLearnerProfiles;
+          if (cloudProfile.exists()) {
+            const cloudStored = parseStoredLearnerProfiles(cloudProfile.data(), user.uid);
+            if (
+              localStored &&
+              (localStored.updatedAt ?? 0) > (cloudStored.updatedAt ?? 0)
+            ) {
+              stored = localStored;
+              profileWriteQueueRef.current = profileWriteQueueRef.current
+                .catch(() => undefined)
+                .then(() => setDoc(profileRef, stored));
+              void profileWriteQueueRef.current.catch((error: unknown) => {
+                if (auth?.currentUser?.uid === user.uid) {
+                  Alert.alert(
+                    "Profile saved on this device",
+                    `Your child profile could not sync to your account. ${
+                      error instanceof Error ? error.message : ""
+                    }`
+                  );
+                }
+              });
+            } else {
+              stored = cloudStored;
+              const cloudData = JSON.stringify(stored);
+              if (cloudData !== localProfile) {
+                void AsyncStorage.setItem(storageKey, cloudData).catch((error: unknown) => {
+                  console.warn("Could not cache the cloud learner profile.", error);
+                });
+              }
+            }
+          } else {
+            stored = localStored ?? {
+              version: 2,
+              profiles: [],
+              activeProfileId: null,
+            };
+            if (stored.profiles.length > 0) {
+              profileWriteQueueRef.current = profileWriteQueueRef.current
+                .catch(() => undefined)
+                .then(() => setDoc(profileRef, stored));
+              void profileWriteQueueRef.current.catch((error: unknown) => {
+                if (auth?.currentUser?.uid === user.uid) {
+                  Alert.alert(
+                    "Profile saved on this device",
+                    `Your child profile could not sync to your account. ${
+                      error instanceof Error ? error.message : ""
+                    }`
+                  );
+                }
+              });
             }
             stored = parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid);
           }
@@ -2540,6 +2631,42 @@ export default function App() {
             if (!canRedirect) return currentScreen;
             return activeProfile?.grade ? "menu" : "grade-selection";
           });
+
+          if (auth?.currentUser?.uid !== user.uid) return;
+          setChildProfiles(stored.profiles);
+          setActiveProfileId(stored.activeProfileId);
+          const activeProfile = stored.profiles.find(
+            (profile) => profile.id === stored.activeProfileId
+          );
+          if (activeProfile) {
+            setChildName(activeProfile.childName);
+            setChildBirthdate(activeProfile.childBirthdate);
+            setSelectedIcon(activeProfile.selectedIcon);
+          }
+          setProfilesReady(true);
+          if (user.emailVerified) {
+            setScreen((currentScreen) => {
+              const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
+              if (!canRedirect) return currentScreen;
+              return activeProfile?.grade ? "menu" : "grade-selection";
+            });
+          }
+        } catch (error) {
+          if (auth?.currentUser?.uid !== user.uid) return;
+          if (localStored) {
+            Alert.alert(
+              "Child profile restored on this device",
+              `Your saved profile is available, but it could not sync with your account. Check your internet connection and try again. ${
+                error instanceof Error ? error.message : ""
+              }`
+            );
+          } else {
+            throw error;
+          }
+        } finally {
+          if (auth?.currentUser?.uid === user.uid) {
+            setProfilesReady(true);
+          }
         }
       })().catch((error: unknown) => {
         if (auth?.currentUser?.uid === user.uid) {
@@ -2816,11 +2943,13 @@ export default function App() {
   ) => {
     const currentUser = requireFirebaseAuth().currentUser;
     if (!currentUser) throw new Error("Sign in again to manage child profiles.");
-    if (!firestore) throw new Error("Cloud profile storage is not configured.");
+    const database = firestore;
+    if (!database) throw new Error("Cloud profile storage is not configured.");
     const data: StoredLearnerProfiles = {
       version: 2,
       profiles,
       activeProfileId: profileId,
+      updatedAt: Date.now(),
     };
     const serializedData = JSON.stringify(data);
     await AsyncStorage.multiSet([
@@ -2830,6 +2959,10 @@ export default function App() {
         serializedData,
       ],
     ]);
+    await AsyncStorage.setItem(
+      `${PROFILE_STORAGE_PREFIX}${currentUser.uid}`,
+      JSON.stringify(data)
+    );
     setChildProfiles(profiles);
     setActiveProfileId(profileId);
     const activeProfile = profiles.find((profile) => profile.id === profileId);
@@ -2843,6 +2976,19 @@ export default function App() {
         Alert.alert(
           "Profile saved on this device",
           `Cloud sync will retry when a connection is available. ${
+    profileWriteQueueRef.current = profileWriteQueueRef.current
+      .catch(() => undefined)
+      .then(() =>
+        setDoc(
+          doc(database, "users", currentUser.uid, "learnerProfiles", "current"),
+          data
+        )
+      );
+    void profileWriteQueueRef.current.catch((error: unknown) => {
+      if (auth?.currentUser?.uid === currentUser.uid) {
+        Alert.alert(
+          "Profile saved on this device",
+          `Your child profile could not sync to your account. ${
             error instanceof Error ? error.message : ""
           }`
         );
@@ -3051,6 +3197,7 @@ export default function App() {
         version: 2,
         profiles: [profile],
         activeProfileId: profile.id,
+        updatedAt: Date.now(),
       };
       await AsyncStorage.setItem(
         `${PROFILE_STORAGE_PREFIX}${user.uid}`,
