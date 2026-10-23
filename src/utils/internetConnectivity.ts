@@ -68,7 +68,7 @@ export function useInternetConnectivity() {
     networkState.isConnected === false ||
     (networkState.isConnected === true &&
       networkState.isInternetReachable === false &&
-      internetProbeSucceeded === false);
+      internetProbeSucceeded !== true);
 
   return { isOffline, checkInternet };
 }

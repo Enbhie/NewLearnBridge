@@ -1730,19 +1730,6 @@ function MenuScreen({
                 </Text>
               </View>
             </View>
-            {grade === "K" ? (
-              <ActionButton onPress={() => setScreen("kinder-lessons")} variant="secondary">
-                OPEN KINDERGARTEN ONLINE LESSONS
-              </ActionButton>
-            ) : grade === "1" ? (
-              <ActionButton onPress={() => setScreen("grade1-lessons")} variant="secondary">
-                OPEN GRADE 1 ONLINE LESSONS
-              </ActionButton>
-            ) : grade === "3" ? (
-              <ActionButton onPress={() => setScreen("grade3-lessons")} variant="secondary">
-                OPEN GRADE 3 ONLINE LESSONS
-              </ActionButton>
-            ) : null}
             <ActionButton onPress={() => setScreen("missions")}>
               OPEN OFFLINE MISSIONS
             </ActionButton>
@@ -2602,6 +2589,14 @@ export default function App() {
     setCloudBackdropVisible(screen !== "settings");
     return () => setCloudBackdropVisible(true);
   }, [screen, setCloudBackdropVisible]);
+  useEffect(() => {
+    if (
+      deviceOffline &&
+      ["kinder-lessons", "grade1-lessons", "grade2-lessons", "grade3-lessons"].includes(screen)
+    ) {
+      setScreen("menu");
+    }
+  }, [deviceOffline, screen]);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
