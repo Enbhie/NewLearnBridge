@@ -170,7 +170,7 @@ type Mission = {
 };
 
 function requiresParentEmailReview(mission: OfflineMission): boolean {
-  return ["K-3", "K-4", "K-5"].includes(mission.id);
+  return mission.grade === "2" || ["K-3", "K-4", "K-5"].includes(mission.id);
 }
 
 const missions: Mission[] = [
@@ -1817,6 +1817,11 @@ function MenuScreen({
               </View>
               <Text style={styles.missionSkill}>📚 {mission.subject}</Text>
               <Text style={styles.cardBody}>{mission.task}</Text>
+              {mission.grade === "2" ? (
+                <Text style={styles.missionPhotoInstruction}>
+                  📷 Take a photo of your work to send to your parent for approval.
+                </Text>
+              ) : null}
               <ActionButton onPress={() => startMission(mission)}>
                 {done ? "DO IT AGAIN" : "START MISSION"}
               </ActionButton>
@@ -3253,6 +3258,7 @@ const styles = StyleSheet.create({
   missionPendingSpinner: { marginTop: 24 },
   missionPendingHint: { color: "#526778", fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 14 },
   photoReviewHeading: { color: "#173B53", fontSize: 15, fontWeight: "900", marginTop: 6, marginBottom: 8, textAlign: "center" },
+  missionPhotoInstruction: { color: "#397147", fontSize: 13, lineHeight: 19, fontWeight: "800", marginTop: 8 },
   missionPhotoPreview: { width: "100%", height: 220, borderRadius: 12, backgroundColor: "#EAF5F7", marginBottom: 10 },
   missionPhotoPlaceholder: { width: "100%", height: 110, alignItems: "center", justifyContent: "center", backgroundColor: "#EAF5F7", borderRadius: 12, marginBottom: 10 },
   missionPhotoPlaceholderText: { color: "#36566A", fontSize: 15, fontWeight: "800" },
