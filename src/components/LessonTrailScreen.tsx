@@ -5,6 +5,7 @@ import type { CategoryId } from "../data/learningContent";
 import type { Difficulty as LessonDifficulty } from "./AccountSettingsScreen";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { AppAppearanceContext } from "./CloudBackdrop";
+import { playFeedback } from "../utils/soundEffects";
 
 // Shared "learning trail" screen used by the Kindergarten and Grade 1 online lessons.
 // Each grade passes in its own subjects (3 subjects x 5 lessons, one minigame per lesson).
@@ -121,6 +122,7 @@ function ChoicePlayer({
   const choose = (option: string) => {
     if (picked !== null) return;
     const isRight = option === round.correct;
+    playFeedback(isRight ? "success" : "error");
     const nextCorrect = correct + (isRight ? 1 : 0);
     setPicked(option);
     setCorrect(nextCorrect);
@@ -230,11 +232,13 @@ function OrderPlayer({
   const pick = (order: number) => {
     if (locked || picked.includes(order)) return;
     if (order !== picked.length) {
+      playFeedback("error");
       setMistakes(mistakes + 1);
       setMessage("Not yet. Try a different one!");
       return;
     }
     const nextPicked = [...picked, order];
+    playFeedback("success");
     setPicked(nextPicked);
     setMessage("");
     if (nextPicked.length === round.items.length) {

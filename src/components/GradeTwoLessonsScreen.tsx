@@ -17,6 +17,7 @@ import type { CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { AppAppearanceContext } from "./CloudBackdrop";
 import LessonInstructionModal from "./LessonInstructionModal";
+import { playFeedback } from "../utils/soundEffects";
 import GradeTwoMiniGame, {
   gradeTwoMiniGameInfo,
   type GradeTwoMiniGameId,
@@ -231,7 +232,9 @@ function LessonQuestionChallenge({
 
   const chooseOption = (option: string) => {
     setSelectedOption(option);
-    if (option === question.answer) {
+    const isCorrect = option === question.answer;
+    playFeedback(isCorrect ? "success" : "error");
+    if (isCorrect) {
       setAnsweredCorrectly(true);
       setFeedback("Great job! That's correct! ⭐");
     } else {
