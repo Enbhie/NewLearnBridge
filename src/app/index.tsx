@@ -220,6 +220,7 @@ const missions: Mission[] = [
 
 const KID_ICONS = ["🦉", "🦁", "🐰", "🐼", "🦊", "🐯"];
 const PROFILE_STORAGE_PREFIX = "learnbridge.profile.";
+const PROFILE_PENDING_SYNC_SUFFIX = ".pending-sync";
 const SETTINGS_STORAGE_PREFIX = "learnbridge.settings.";
 const SCREEN_TIME_STORAGE_PREFIX = "learnbridge.screenTime.";
 const LESSON_PROGRESS_STORAGE_PREFIX = "learnbridge.lessonProgress.";
@@ -376,6 +377,35 @@ function parseStoredLearnerProfiles(value: unknown, userId: string): StoredLearn
       ? { updatedAt: stored.updatedAt }
       : {}),
   };
+}
+
+const learnerProfileSyncQueues = new Map<string, Promise<void>>();
+
+function syncPendingLearnerProfiles(userId: string): Promise<void> {
+  const database = firestore;
+  if (!database) return Promise.reject(new Error("Cloud profile storage is not configured."));
+
+  const existingSync = learnerProfileSyncQueues.get(userId);
+  const sync = (existingSync ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(async () => {
+      const pendingKey = `${PROFILE_STORAGE_PREFIX}${userId}${PROFILE_PENDING_SYNC_SUFFIX}`;
+      const pendingProfiles = await AsyncStorage.getItem(pendingKey);
+      if (!pendingProfiles) return;
+
+      const stored = parseStoredLearnerProfiles(JSON.parse(pendingProfiles), userId);
+      await setDoc(doc(database, "users", userId, "learnerProfiles", "current"), stored);
+      if (await AsyncStorage.getItem(pendingKey) === pendingProfiles) {
+        await AsyncStorage.removeItem(pendingKey);
+      }
+    });
+  const queuedSync = sync.finally(() => {
+    if (learnerProfileSyncQueues.get(userId) === queuedSync) {
+      learnerProfileSyncQueues.delete(userId);
+    }
+  });
+  learnerProfileSyncQueues.set(userId, queuedSync);
+  return queuedSync;
 }
 
 // --- HELPER COMPONENTS (OUTSIDE APP) ---
@@ -2422,9 +2452,10 @@ export default function App() {
   }, [backgroundMusicTrack]);
 
   useEffect(() => {
-    if (!auth) return;
+    const currentAuth = auth;
+    if (!currentAuth) return;
 
-    return onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(currentAuth, (user) => {
       setFirebaseUser(user);
       setPreferences(DEFAULT_PREFERENCES);
       if (!user) {
@@ -2445,6 +2476,42 @@ export default function App() {
           throw new Error("Cloud profile storage is not configured.");
         }
         const profileRef = doc(firestore, "users", user.uid, "learnerProfiles", "current");
+        let stored: StoredLearnerProfiles;
+        let cloudSyncError: unknown;
+        const pendingProfileSync = await AsyncStorage.getItem(
+          `${PROFILE_STORAGE_PREFIX}${user.uid}${PROFILE_PENDING_SYNC_SUFFIX}`
+        );
+        if (pendingProfileSync) {
+          stored = parseStoredLearnerProfiles(JSON.parse(pendingProfileSync), user.uid);
+          void syncPendingLearnerProfiles(user.uid).catch((error: unknown) => {
+            if (auth?.currentUser?.uid === user.uid) {
+              Alert.alert(
+                "Profile saved on this device",
+                `Cloud sync will retry when a connection is available. ${
+                  error instanceof Error ? error.message : ""
+                }`
+              );
+            }
+          });
+        } else {
+          try {
+            const cloudProfile = await getDoc(profileRef);
+            if (cloudProfile.exists()) {
+              stored = parseStoredLearnerProfiles(cloudProfile.data(), user.uid);
+            } else {
+              const localProfile = await AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`);
+              stored = localProfile
+                ? parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid)
+                : { version: 2, profiles: [], activeProfileId: null };
+              if (stored.profiles.length > 0) {
+                await setDoc(profileRef, stored);
+              }
+            }
+          } catch (error) {
+            cloudSyncError = error;
+            const localProfile = await AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`);
+            if (!localProfile) {
+              throw error;
         const storageKey = `${PROFILE_STORAGE_PREFIX}${user.uid}`;
         const localProfile = await AsyncStorage.getItem(storageKey);
         const localStored: StoredLearnerProfiles | null = localProfile
@@ -2527,7 +2594,43 @@ export default function App() {
                 }
               });
             }
+            stored = parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid);
           }
+        }
+
+        if (auth?.currentUser?.uid !== user.uid) return;
+        if (stored.profiles.length > 0) {
+          await AsyncStorage.setItem(
+            `${PROFILE_STORAGE_PREFIX}${user.uid}`,
+            JSON.stringify(stored)
+          );
+        }
+        if (auth?.currentUser?.uid !== user.uid) return;
+        setChildProfiles(stored.profiles);
+        setActiveProfileId(stored.activeProfileId);
+        const activeProfile = stored.profiles.find(
+          (profile) => profile.id === stored.activeProfileId
+        );
+        if (activeProfile) {
+          setChildName(activeProfile.childName);
+          setChildBirthdate(activeProfile.childBirthdate);
+          setSelectedIcon(activeProfile.selectedIcon);
+        }
+        setProfilesReady(true);
+        if (cloudSyncError) {
+          Alert.alert(
+            "Child profile restored on this device",
+            `Your saved profile is available, but it could not sync with your account. Check your internet connection and try again. ${
+              cloudSyncError instanceof Error ? cloudSyncError.message : ""
+            }`
+          );
+        }
+        if (user.emailVerified) {
+          setScreen((currentScreen) => {
+            const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
+            if (!canRedirect) return currentScreen;
+            return activeProfile?.grade ? "menu" : "grade-selection";
+          });
 
           if (auth?.currentUser?.uid !== user.uid) return;
           setChildProfiles(stored.profiles);
@@ -2594,6 +2697,25 @@ export default function App() {
         );
       }
     });
+
+    const networkSubscription = Network.addNetworkStateListener((state) => {
+      if (state.isConnected !== true || state.isInternetReachable === false) return;
+      const userId = currentAuth.currentUser?.uid;
+      if (!userId) return;
+      void syncPendingLearnerProfiles(userId).catch((error: unknown) => {
+        if (currentAuth.currentUser?.uid === userId) {
+          Alert.alert(
+            "Profile sync pending",
+            error instanceof Error ? error.message : "Cloud sync will retry when a connection is available."
+          );
+        }
+      });
+    });
+
+    return () => {
+      unsubscribeAuth();
+      networkSubscription.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -2829,6 +2951,14 @@ export default function App() {
       activeProfileId: profileId,
       updatedAt: Date.now(),
     };
+    const serializedData = JSON.stringify(data);
+    await AsyncStorage.multiSet([
+      [`${PROFILE_STORAGE_PREFIX}${currentUser.uid}`, serializedData],
+      [
+        `${PROFILE_STORAGE_PREFIX}${currentUser.uid}${PROFILE_PENDING_SYNC_SUFFIX}`,
+        serializedData,
+      ],
+    ]);
     await AsyncStorage.setItem(
       `${PROFILE_STORAGE_PREFIX}${currentUser.uid}`,
       JSON.stringify(data)
@@ -2841,6 +2971,11 @@ export default function App() {
       setChildBirthdate(activeProfile.childBirthdate);
       setSelectedIcon(activeProfile.selectedIcon);
     }
+    void syncPendingLearnerProfiles(currentUser.uid).catch((error: unknown) => {
+      if (auth?.currentUser?.uid === currentUser.uid) {
+        Alert.alert(
+          "Profile saved on this device",
+          `Cloud sync will retry when a connection is available. ${
     profileWriteQueueRef.current = profileWriteQueueRef.current
       .catch(() => undefined)
       .then(() =>
@@ -3147,6 +3282,9 @@ export default function App() {
       }
       void Promise.all([
         AsyncStorage.removeItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`),
+        AsyncStorage.removeItem(
+          `${PROFILE_STORAGE_PREFIX}${user.uid}${PROFILE_PENDING_SYNC_SUFFIX}`
+        ),
         AsyncStorage.removeItem(`${SETTINGS_STORAGE_PREFIX}${user.uid}`),
         AsyncStorage.removeItem(`${SCREEN_TIME_STORAGE_PREFIX}${user.uid}`),
       ]).catch(() => undefined);
@@ -3208,6 +3346,9 @@ export default function App() {
     }
     void Promise.all([
       AsyncStorage.removeItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`),
+      AsyncStorage.removeItem(
+        `${PROFILE_STORAGE_PREFIX}${user.uid}${PROFILE_PENDING_SYNC_SUFFIX}`
+      ),
       AsyncStorage.removeItem(`${SETTINGS_STORAGE_PREFIX}${user.uid}`),
       AsyncStorage.removeItem(`${SCREEN_TIME_STORAGE_PREFIX}${user.uid}`),
       AsyncStorage.removeItem(`learnbridge.missions.${user.uid}`),
