@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from "expo-file-system";
-import * as Network from "expo-network";
 import * as SQLite from "expo-sqlite";
 import { auth } from "../firebase";
+import { checkInternetConnectivity } from "../utils/internetConnectivity";
 import { submitMissionPhotoForReview } from "./missionSubmissions";
 
 export type MissionSubmissionStatus =
@@ -174,8 +174,7 @@ async function syncUserSubmissions(
   userId: string,
   onStatusChange: StatusChangeListener
 ): Promise<void> {
-  const network = await Network.getNetworkStateAsync();
-  if (network.isConnected !== true || network.isInternetReachable === false) return;
+  if (!(await checkInternetConnectivity())) return;
 
   const database = await openDatabase();
   const pending = await database.getAllAsync<SubmissionRow>(

@@ -1,40 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
-import * as Network from "expo-network";
+import { useEffect, useState } from "react";
 import { Modal, StyleSheet, Text, View } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { useInternetConnectivity } from "../utils/internetConnectivity";
 
 export function useInternetRequirement() {
-  const networkState = Network.useNetworkState();
-  const [offlineOverride, setOfflineOverride] = useState(false);
-  const isOffline =
-    offlineOverride ||
-    networkState.isConnected === false ||
-    networkState.isInternetReachable === false;
-
-  useEffect(() => {
-    if (
-      networkState.isConnected === true &&
-      networkState.isInternetReachable !== false
-    ) {
-      setOfflineOverride(false);
-    }
-  }, [networkState.isConnected, networkState.isInternetReachable]);
-
-  const checkInternet = useCallback(async () => {
-    try {
-      const currentState = await Network.getNetworkStateAsync();
-      const connected =
-        currentState.isConnected === true &&
-        currentState.isInternetReachable !== false;
-      setOfflineOverride(!connected);
-      return connected;
-    } catch (error) {
-      setOfflineOverride(true);
-      throw error;
-    }
-  }, []);
-
-  return { isOffline, checkInternet };
+  return useInternetConnectivity();
 }
 
 type Props = {

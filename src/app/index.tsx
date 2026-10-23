@@ -86,6 +86,7 @@ import {
   type CategoryId,
 } from "../data/learningContent";
 import { auth, firebaseConfigured, firestore } from "../firebase";
+import { checkInternetConnectivity, useInternetConnectivity } from "../utils/internetConnectivity";
 import {
   setBackgroundMusic,
   type BackgroundMusicTrack,
@@ -1874,7 +1875,7 @@ function MenuScreen({
       }
     });
     const subscription = Network.addNetworkStateListener((state) => {
-      if (state.isConnected === true && state.isInternetReachable !== false) {
+      if (state.isConnected === true) {
         void syncSubmissions().catch((error: unknown) => {
           if (active) {
             setMissionError(
@@ -2585,10 +2586,7 @@ function GradeSetupTutorialScreen({
 // --- MAIN APP COMPONENT ---
 
 export default function App() {
-  const networkState = Network.useNetworkState();
-  const deviceOffline =
-    networkState.isConnected === false ||
-    networkState.isInternetReachable === false;
+  const { isOffline: deviceOffline } = useInternetConnectivity();
   const [screen, setScreen] = useState<Screen>("home");
   const setCloudBackdropVisible = useContext(CloudBackdropVisibilityContext);
   const { setDarkMode } = useContext(AppAppearanceContext);
@@ -2847,7 +2845,7 @@ export default function App() {
     });
 
     const networkSubscription = Network.addNetworkStateListener((state) => {
-      if (state.isConnected !== true || state.isInternetReachable === false) return;
+      if (state.isConnected !== true) return;
       const userId = currentAuth.currentUser?.uid;
       if (!userId) return;
       if (currentAuth.currentUser?.emailVerified) syncPendingMissionPhotos(userId);
@@ -2870,6 +2868,19 @@ export default function App() {
       appStateSubscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    const user = auth?.currentUser;
+    if (deviceOffline || !user?.emailVerified) return;
+    void checkInternetConnectivity()
+      .then((isOnline) => {
+        if (!isOnline || auth?.currentUser?.uid !== user.uid) return;
+        return syncMissionSubmissions(user.uid, () => undefined);
+      })
+      .catch((error: unknown) => {
+        console.warn("Saved mission photos will retry when the connection is available.", error);
+      });
+  }, [deviceOffline]);
 
   useEffect(() => {
     let isCurrent = true;
