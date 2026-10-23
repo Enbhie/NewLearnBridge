@@ -2476,42 +2476,6 @@ export default function App() {
           throw new Error("Cloud profile storage is not configured.");
         }
         const profileRef = doc(firestore, "users", user.uid, "learnerProfiles", "current");
-        let stored: StoredLearnerProfiles;
-        let cloudSyncError: unknown;
-        const pendingProfileSync = await AsyncStorage.getItem(
-          `${PROFILE_STORAGE_PREFIX}${user.uid}${PROFILE_PENDING_SYNC_SUFFIX}`
-        );
-        if (pendingProfileSync) {
-          stored = parseStoredLearnerProfiles(JSON.parse(pendingProfileSync), user.uid);
-          void syncPendingLearnerProfiles(user.uid).catch((error: unknown) => {
-            if (auth?.currentUser?.uid === user.uid) {
-              Alert.alert(
-                "Profile saved on this device",
-                `Cloud sync will retry when a connection is available. ${
-                  error instanceof Error ? error.message : ""
-                }`
-              );
-            }
-          });
-        } else {
-          try {
-            const cloudProfile = await getDoc(profileRef);
-            if (cloudProfile.exists()) {
-              stored = parseStoredLearnerProfiles(cloudProfile.data(), user.uid);
-            } else {
-              const localProfile = await AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`);
-              stored = localProfile
-                ? parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid)
-                : { version: 2, profiles: [], activeProfileId: null };
-              if (stored.profiles.length > 0) {
-                await setDoc(profileRef, stored);
-              }
-            }
-          } catch (error) {
-            cloudSyncError = error;
-            const localProfile = await AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`);
-            if (!localProfile) {
-              throw error;
         const storageKey = `${PROFILE_STORAGE_PREFIX}${user.uid}`;
         const localProfile = await AsyncStorage.getItem(storageKey);
         const localStored: StoredLearnerProfiles | null = localProfile
@@ -2540,70 +2504,94 @@ export default function App() {
           }
         }
 
-        try {
-          const cloudProfile = await getDoc(profileRef);
-          if (auth?.currentUser?.uid !== user.uid) return;
-          let stored: StoredLearnerProfiles;
-          if (cloudProfile.exists()) {
-            const cloudStored = parseStoredLearnerProfiles(cloudProfile.data(), user.uid);
-            if (
-              localStored &&
-              (localStored.updatedAt ?? 0) > (cloudStored.updatedAt ?? 0)
-            ) {
-              stored = localStored;
-              profileWriteQueueRef.current = profileWriteQueueRef.current
-                .catch(() => undefined)
-                .then(() => setDoc(profileRef, stored));
-              void profileWriteQueueRef.current.catch((error: unknown) => {
-                if (auth?.currentUser?.uid === user.uid) {
-                  Alert.alert(
-                    "Profile saved on this device",
-                    `Your child profile could not sync to your account. ${
-                      error instanceof Error ? error.message : ""
-                    }`
+        let stored = localStored ?? {
+          version: 2,
+          profiles: [],
+          activeProfileId: null,
+        };
+        let cloudSyncError: unknown;
+        const pendingProfileSync = await AsyncStorage.getItem(
+          `${PROFILE_STORAGE_PREFIX}${user.uid}${PROFILE_PENDING_SYNC_SUFFIX}`
+        );
+        if (pendingProfileSync) {
+          stored = parseStoredLearnerProfiles(JSON.parse(pendingProfileSync), user.uid);
+          void syncPendingLearnerProfiles(user.uid).catch((error: unknown) => {
+            if (auth?.currentUser?.uid === user.uid) {
+              Alert.alert(
+                "Profile saved on this device",
+                `Cloud sync will retry when a connection is available. ${
+                  error instanceof Error ? error.message : ""
+                }`
+              );
+            }
+          });
+        } else {
+          try {
+            const cloudProfileSnapshot = await getDoc(profileRef);
+            if (auth?.currentUser?.uid !== user.uid) return;
+            if (cloudProfileSnapshot.exists()) {
+              const cloudStored = parseStoredLearnerProfiles(
+                cloudProfileSnapshot.data(),
+                user.uid
+              );
+              if (
+                localStored &&
+                (localStored.updatedAt ?? 0) > (cloudStored.updatedAt ?? 0)
+              ) {
+                stored = localStored;
+                profileWriteQueueRef.current = profileWriteQueueRef.current
+                  .catch(() => undefined)
+                  .then(() => setDoc(profileRef, stored));
+                void profileWriteQueueRef.current.catch((error: unknown) => {
+                  if (auth?.currentUser?.uid === user.uid) {
+                    Alert.alert(
+                      "Profile saved on this device",
+                      `Your child profile could not sync to your account. ${
+                        error instanceof Error ? error.message : ""
+                      }`
+                    );
+                  }
+                });
+              } else {
+                stored = cloudStored;
+                const cloudData = JSON.stringify(stored);
+                if (cloudData !== localProfile) {
+                  void AsyncStorage.setItem(storageKey, cloudData).catch(
+                    (error: unknown) => {
+                      console.warn("Could not cache the cloud learner profile.", error);
+                    }
                   );
                 }
-              });
+              }
             } else {
-              stored = cloudStored;
-              const cloudData = JSON.stringify(stored);
-              if (cloudData !== localProfile) {
-                void AsyncStorage.setItem(storageKey, cloudData).catch((error: unknown) => {
-                  console.warn("Could not cache the cloud learner profile.", error);
+              if (stored.profiles.length > 0) {
+                profileWriteQueueRef.current = profileWriteQueueRef.current
+                  .catch(() => undefined)
+                  .then(() => setDoc(profileRef, stored));
+                void profileWriteQueueRef.current.catch((error: unknown) => {
+                  if (auth?.currentUser?.uid === user.uid) {
+                    Alert.alert(
+                      "Profile saved on this device",
+                      `Your child profile could not sync to your account. ${
+                        error instanceof Error ? error.message : ""
+                      }`
+                    );
+                  }
                 });
               }
             }
-          } else {
-            stored = localStored ?? {
-              version: 2,
-              profiles: [],
-              activeProfileId: null,
-            };
-            if (stored.profiles.length > 0) {
-              profileWriteQueueRef.current = profileWriteQueueRef.current
-                .catch(() => undefined)
-                .then(() => setDoc(profileRef, stored));
-              void profileWriteQueueRef.current.catch((error: unknown) => {
-                if (auth?.currentUser?.uid === user.uid) {
-                  Alert.alert(
-                    "Profile saved on this device",
-                    `Your child profile could not sync to your account. ${
-                      error instanceof Error ? error.message : ""
-                    }`
-                  );
-                }
-              });
+          } catch (error) {
+            if (auth?.currentUser?.uid !== user.uid) return;
+            cloudSyncError = error;
+            if (!localStored) {
+              throw error;
             }
-            stored = parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid);
           }
         }
 
         if (auth?.currentUser?.uid !== user.uid) return;
         if (stored.profiles.length > 0) {
-          await AsyncStorage.setItem(
-            `${PROFILE_STORAGE_PREFIX}${user.uid}`,
-            JSON.stringify(stored)
-          );
+          await AsyncStorage.setItem(storageKey, JSON.stringify(stored));
         }
         if (auth?.currentUser?.uid !== user.uid) return;
         setChildProfiles(stored.profiles);
@@ -2624,49 +2612,6 @@ export default function App() {
               cloudSyncError instanceof Error ? cloudSyncError.message : ""
             }`
           );
-        }
-        if (user.emailVerified) {
-          setScreen((currentScreen) => {
-            const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
-            if (!canRedirect) return currentScreen;
-            return activeProfile?.grade ? "menu" : "grade-selection";
-          });
-
-          if (auth?.currentUser?.uid !== user.uid) return;
-          setChildProfiles(stored.profiles);
-          setActiveProfileId(stored.activeProfileId);
-          const activeProfile = stored.profiles.find(
-            (profile) => profile.id === stored.activeProfileId
-          );
-          if (activeProfile) {
-            setChildName(activeProfile.childName);
-            setChildBirthdate(activeProfile.childBirthdate);
-            setSelectedIcon(activeProfile.selectedIcon);
-          }
-          setProfilesReady(true);
-          if (user.emailVerified) {
-            setScreen((currentScreen) => {
-              const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
-              if (!canRedirect) return currentScreen;
-              return activeProfile?.grade ? "menu" : "grade-selection";
-            });
-          }
-        } catch (error) {
-          if (auth?.currentUser?.uid !== user.uid) return;
-          if (localStored) {
-            Alert.alert(
-              "Child profile restored on this device",
-              `Your saved profile is available, but it could not sync with your account. Check your internet connection and try again. ${
-                error instanceof Error ? error.message : ""
-              }`
-            );
-          } else {
-            throw error;
-          }
-        } finally {
-          if (auth?.currentUser?.uid === user.uid) {
-            setProfilesReady(true);
-          }
         }
       })().catch((error: unknown) => {
         if (auth?.currentUser?.uid === user.uid) {
@@ -2943,8 +2888,7 @@ export default function App() {
   ) => {
     const currentUser = requireFirebaseAuth().currentUser;
     if (!currentUser) throw new Error("Sign in again to manage child profiles.");
-    const database = firestore;
-    if (!database) throw new Error("Cloud profile storage is not configured.");
+    if (!firestore) throw new Error("Cloud profile storage is not configured.");
     const data: StoredLearnerProfiles = {
       version: 2,
       profiles,
@@ -2959,10 +2903,6 @@ export default function App() {
         serializedData,
       ],
     ]);
-    await AsyncStorage.setItem(
-      `${PROFILE_STORAGE_PREFIX}${currentUser.uid}`,
-      JSON.stringify(data)
-    );
     setChildProfiles(profiles);
     setActiveProfileId(profileId);
     const activeProfile = profiles.find((profile) => profile.id === profileId);
@@ -2976,19 +2916,6 @@ export default function App() {
         Alert.alert(
           "Profile saved on this device",
           `Cloud sync will retry when a connection is available. ${
-    profileWriteQueueRef.current = profileWriteQueueRef.current
-      .catch(() => undefined)
-      .then(() =>
-        setDoc(
-          doc(database, "users", currentUser.uid, "learnerProfiles", "current"),
-          data
-        )
-      );
-    void profileWriteQueueRef.current.catch((error: unknown) => {
-      if (auth?.currentUser?.uid === currentUser.uid) {
-        Alert.alert(
-          "Profile saved on this device",
-          `Your child profile could not sync to your account. ${
             error instanceof Error ? error.message : ""
           }`
         );
