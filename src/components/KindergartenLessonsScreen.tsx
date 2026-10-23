@@ -328,14 +328,14 @@ export const kinderSubjects: Subject[] = [
 ];
 
 // Total lessons across all subjects. index.tsx can use this for the progress bar.
-export const kindergartenLessonCount = kinderSubjects.reduce(
+export const kinderCurriculumLessonCount = kinderSubjects.reduce(
   (sum, subject) => sum + subject.lessons.length,
   0
 );
-export const kinderLessonCount = kindergartenLessonCount;
+export const kinderLessonCount = kinderCurriculumLessonCount;
 
 // Progress keys look like grade:k:online:<subject>:<lesson>.
-export default function KinderLessonsScreen(props: GradeScreenProps) {
+export function KinderLessonsScreen(props: GradeScreenProps) {
   return (
     <LessonTrailScreen
       {...props}

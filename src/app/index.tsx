@@ -20,6 +20,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import GradeOneLessonsScreen, { gradeOneLessonCount } from "../components/GradeOneLessonsScreen";
 import {
+    Animated,
     ActivityIndicator,
     Alert,
     AppState,
@@ -2269,18 +2270,28 @@ export default function App() {
           throw new Error("Cloud profile storage is not configured.");
         }
         const profileRef = doc(firestore, "users", user.uid, "learnerProfiles", "current");
-        const cloudProfile = await getDoc(profileRef);
         let stored: StoredLearnerProfiles;
-        if (cloudProfile.exists()) {
-          stored = parseStoredLearnerProfiles(cloudProfile.data(), user.uid);
-        } else {
-          const localProfile = await AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`);
-          stored = localProfile
-            ? parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid)
-            : { version: 2, profiles: [], activeProfileId: null };
-          if (stored.profiles.length > 0) {
-            await setDoc(profileRef, stored);
+        let cloudSyncError: unknown;
+        try {
+          const cloudProfile = await getDoc(profileRef);
+          if (cloudProfile.exists()) {
+            stored = parseStoredLearnerProfiles(cloudProfile.data(), user.uid);
+          } else {
+            const localProfile = await AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`);
+            stored = localProfile
+              ? parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid)
+              : { version: 2, profiles: [], activeProfileId: null };
+            if (stored.profiles.length > 0) {
+              await setDoc(profileRef, stored);
+            }
           }
+        } catch (error) {
+          cloudSyncError = error;
+          const localProfile = await AsyncStorage.getItem(`${PROFILE_STORAGE_PREFIX}${user.uid}`);
+          if (!localProfile) {
+            throw error;
+          }
+          stored = parseStoredLearnerProfiles(JSON.parse(localProfile), user.uid);
         }
 
         if (auth?.currentUser?.uid !== user.uid) return;
@@ -2302,6 +2313,14 @@ export default function App() {
           setSelectedIcon(activeProfile.selectedIcon);
         }
         setProfilesReady(true);
+        if (cloudSyncError) {
+          Alert.alert(
+            "Child profile restored on this device",
+            `Your saved profile is available, but it could not sync with your account. Check your internet connection and try again. ${
+              cloudSyncError instanceof Error ? cloudSyncError.message : ""
+            }`
+          );
+        }
         if (user.emailVerified) {
           setScreen((currentScreen) => {
             const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
@@ -2927,6 +2946,36 @@ export default function App() {
     screenTimeReady &&
     preferences.screenTimeLimitMinutes > 0 &&
     screenTimeUsedSeconds >= preferences.screenTimeLimitMinutes * 60;
+  const accountLoadSteps = [
+    { label: "Learner profile", ready: profilesReady },
+    { label: "Account preferences", ready: preferencesReady },
+    { label: "Screen-time data", ready: screenTimeReady },
+  ];
+  const accountLoadProgress = Math.round(
+    (accountLoadSteps.filter((step) => step.ready).length / accountLoadSteps.length) * 100
+  );
+  const accountLoading = Boolean(
+    firebaseUser &&
+      screen !== "home" &&
+      screen !== "verify-email" &&
+      (!profilesReady || !screenTimeReady || !preferencesReady)
+  );
+  const accountLoadingSweep = useRef(new Animated.Value(0)).current;
+  const [accountLoadingTrackWidth, setAccountLoadingTrackWidth] = useState(0);
+
+  useEffect(() => {
+    if (!accountLoading) return;
+
+    const sweep = Animated.loop(
+      Animated.timing(accountLoadingSweep, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      })
+    );
+    sweep.start();
+    return () => sweep.stop();
+  }, [accountLoading, accountLoadingSweep]);
 
   if (screen === "home") {
     return (
@@ -2945,14 +2994,73 @@ export default function App() {
     );
   }
 
-  if (
-    firebaseUser &&
-    screen !== "verify-email" &&
-    (!profilesReady || !screenTimeReady || !preferencesReady)
-  ) {
+  if (accountLoading) {
     return (
       <SafeAreaView style={styles.limitReachedPage}>
-        <Text style={styles.limitReachedText}>Loading account settings...</Text>
+        <View style={styles.accountLoadingPanel}>
+          <Text style={styles.accountLoadingIcon}>☁️</Text>
+          <Text style={styles.accountLoadingTitle}>Getting your account ready</Text>
+          <Text style={styles.accountLoadingMessage}>
+            We’re loading your saved family information.
+          </Text>
+          <View
+            accessibilityLabel={`Account loading progress: ${accountLoadProgress}%`}
+            accessibilityRole="progressbar"
+            accessibilityValue={{
+              min: 0,
+              max: 100,
+              now: accountLoadProgress,
+            }}
+            onLayout={({ nativeEvent }) =>
+              setAccountLoadingTrackWidth(nativeEvent.layout.width)
+            }
+            style={styles.accountLoadingProgressTrack}
+          >
+            <View
+              style={[
+                styles.accountLoadingProgressValue,
+                { width: `${accountLoadProgress}%` },
+              ]}
+            />
+            <Animated.View
+              style={[
+                styles.accountLoadingProgressSweep,
+                {
+                  transform: [
+                    {
+                      translateX: accountLoadingSweep.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-90, accountLoadingTrackWidth || 300],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+          </View>
+          <Text style={styles.accountLoadingPercent}>
+            {accountLoadSteps.filter((step) => step.ready).length} of {accountLoadSteps.length} steps complete
+          </Text>
+          <View style={styles.accountLoadingSteps}>
+            {accountLoadSteps.map((step) => {
+              return (
+                <View key={step.label} style={styles.accountLoadingStep}>
+                  <View style={styles.accountLoadingStepIcon}>
+                    {step.ready ? (
+                      <Text style={styles.accountLoadingCheck}>✓</Text>
+                    ) : (
+                      <ActivityIndicator size="small" color="#258EA3" />
+                    )}
+                  </View>
+                  <Text style={styles.accountLoadingStepLabel}>{step.label}</Text>
+                  <Text style={styles.accountLoadingStepStatus}>
+                    {step.ready ? "Ready" : "Loading"}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
       </SafeAreaView>
     );
   }
@@ -3257,6 +3365,20 @@ const styles = StyleSheet.create({
   eyeBreakTimer: { color: "#28543A", fontSize: 48, lineHeight: 56, fontWeight: "900", fontVariant: ["tabular-nums"] },
   eyeBreakCaption: { color: "#46564B", fontSize: 14, lineHeight: 20, fontWeight: "700", marginTop: 2 },
   limitReachedPage: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "transparent", padding: 20 },
+  accountLoadingPanel: { width: "100%", maxWidth: 420, alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#B8DFCC", borderWidth: 2, borderRadius: 24, padding: 24 },
+  accountLoadingIcon: { fontSize: 42, marginBottom: 8 },
+  accountLoadingTitle: { color: "#173B53", fontSize: 24, lineHeight: 30, fontWeight: "900", textAlign: "center" },
+  accountLoadingMessage: { color: "#465E6C", fontSize: 15, lineHeight: 22, textAlign: "center", marginTop: 6, marginBottom: 20 },
+  accountLoadingProgressTrack: { width: "100%", height: 12, overflow: "hidden", backgroundColor: "#E7F0EC", borderRadius: 6 },
+  accountLoadingProgressValue: { height: "100%", backgroundColor: "#258EA3", borderRadius: 6 },
+  accountLoadingProgressSweep: { position: "absolute", left: 0, top: 0, width: 90, height: "100%", backgroundColor: "#81D1D7", opacity: 0.8 },
+  accountLoadingPercent: { color: "#173B53", fontSize: 16, fontWeight: "800", marginTop: 8, marginBottom: 14 },
+  accountLoadingSteps: { width: "100%", gap: 10 },
+  accountLoadingStep: { minHeight: 40, flexDirection: "row", alignItems: "center", backgroundColor: "#F5F9F7", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  accountLoadingStepIcon: { width: 28, height: 28, alignItems: "center", justifyContent: "center", marginRight: 10 },
+  accountLoadingCheck: { color: "#23804F", fontSize: 20, fontWeight: "900" },
+  accountLoadingStepLabel: { flex: 1, color: "#263F4D", fontSize: 14, fontWeight: "700" },
+  accountLoadingStepStatus: { color: "#59737F", fontSize: 12, fontWeight: "700" },
   limitReachedPanel: { width: "100%", maxWidth: 420, backgroundColor: "#FFFFFF", borderColor: "#D8E1D7", borderWidth: 1, borderRadius: 14, padding: 22 },
   limitReachedTitle: { color: "#26352B", fontSize: 26, lineHeight: 32, fontWeight: "900", textAlign: "center", marginBottom: 10 },
   limitReachedText: { color: "#46564B", fontSize: 16, lineHeight: 24, textAlign: "center", marginBottom: 18 },

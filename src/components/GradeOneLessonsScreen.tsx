@@ -1,21 +1,8 @@
-import { useContext, useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import type { CategoryId } from "../data/learningContent";
-import { AnimatedPressable as Pressable } from "./AnimatedPressable";
-import { AppAppearanceContext } from "./CloudBackdrop";
-import {
-  BlendTrainGame,
-  ChooseKindlyGame,
-  ChoreQuestGame,
-  CommunityBuilderGame,
-  NumberHopGame,
-  SentenceBuilderGame,
-  ShopkeeperGame,
-  StoryTimeGame,
-  TrashSorterGame,
-  WordHuntGame,
-} from "./GradeOneGames";
+import LessonTrailScreen, {
+  rep,
+  type GradeScreenProps,
+  type Subject,
+} from "./LessonTrailScreen";
 
 // ---------- Curriculum data ----------
 // Grade 1: three subjects, five lessons each, one minigame per lesson.
@@ -354,147 +341,12 @@ export const gradeOneSubjects: Subject[] = [
   },
 ];
 
-// Total star slots (games x 3 levels). index.tsx uses this for the progress bar.
-export const gradeOneLessonCount =
-  gradeOneUnits.reduce((sum, unit) => sum + unit.games.length, 0) * LEVELS.length;
+export const gradeOneLessonCount = gradeOneSubjects.reduce(
+  (sum, subject) => sum + subject.lessons.length,
+  0
+);
 
-// Prefix matches how index.tsx filters Grade 1 progress.
-const levelId = (unitId: string, gameId: string, level: number) =>
-  `grade:1:online:${unitId}:${gameId}:L${level}`;
-
-// ---------- Props ----------
-
-type Props = {
-  onBack: () => void;
-  onMusicCategoryChange: (category: CategoryId | null) => void;
-  screenTimeLimitMinutes?: number;
-  completedLessonIds: string[];
-  lessonProgressReady: boolean;
-  onCompleteLesson: (lessonId: string) => void;
-};
-
-type View_ =
-  | { kind: "units" }
-  | { kind: "unit"; unitId: string }
-  | { kind: "game"; unitId: string; gameId: string; level: number };
-
-// ---------- Main screen ----------
-
-export default function GradeOneLessonsScreen({
-  onBack,
-  onMusicCategoryChange,
-  completedLessonIds,
-  lessonProgressReady,
-  onCompleteLesson,
-}: Props) {
-  const { darkMode } = useContext(AppAppearanceContext);
-  const [view, setView] = useState<View_>({ kind: "units" });
-
-  const activeUnit =
-    view.kind === "units" ? null : gradeOneUnits.find((u) => u.id === view.unitId) ?? null;
-
-  useEffect(() => {
-    onMusicCategoryChange(activeUnit ? activeUnit.music : null);
-  }, [activeUnit, onMusicCategoryChange]);
-
-  const isDone = (unitId: string, gameId: string, level: number) =>
-    completedLessonIds.includes(levelId(unitId, gameId, level));
-
-  const unitStars = (unit: Unit) =>
-    unit.games.reduce(
-      (sum, g) => sum + LEVELS.filter((l) => isDone(unit.id, g.id, l)).length,
-      0
-    );
-
-  // ----- Game view -----
-  if (view.kind === "game" && activeUnit) {
-    const game = activeUnit.games.find((g) => g.id === view.gameId);
-    if (game) {
-      const common = {
-        level: view.level,
-        onExit: () => setView({ kind: "unit", unitId: activeUnit.id }),
-        onPassed: () => onCompleteLesson(levelId(activeUnit.id, game.id, view.level)),
-      };
-      switch (game.id) {
-        case "blend-train": return <BlendTrainGame {...common} />;
-        case "word-hunt": return <WordHuntGame {...common} />;
-        case "sentence-builder": return <SentenceBuilderGame {...common} />;
-        case "story-time": return <StoryTimeGame {...common} />;
-        case "shopkeeper": return <ShopkeeperGame {...common} />;
-        case "number-hop": return <NumberHopGame {...common} />;
-        case "trash-sorter": return <TrashSorterGame {...common} />;
-        case "community-builder": return <CommunityBuilderGame {...common} />;
-        case "choose-kindly": return <ChooseKindlyGame {...common} />;
-        case "chore-quest": return <ChoreQuestGame {...common} />;
-      }
-    }
-  }
-
-  // ----- Unit view -----
-  if (view.kind === "unit" && activeUnit) {
-    return (
-      <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <Pressable onPress={() => setView({ kind: "units" })} style={styles.backBtn}>
-            <Text style={styles.backBtnText}>Back</Text>
-          </Pressable>
-          <View style={[styles.hero, darkMode && styles.darkCard]}>
-            <Text style={styles.bigEmoji}>{activeUnit.emoji}</Text>
-            <Text style={[styles.heroTitle, darkMode && styles.darkText]}>
-              Unit {activeUnit.number}: {activeUnit.title}
-            </Text>
-            <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>{activeUnit.focus}</Text>
-            <Text style={[styles.starsText, darkMode && styles.darkText]}>
-              ⭐ {unitStars(activeUnit)} / {activeUnit.games.length * LEVELS.length}
-            </Text>
-          </View>
-
-          {activeUnit.games.map((game) => (
-            <View key={game.id} style={[styles.card, darkMode && styles.darkCard]}>
-              <Text style={styles.cardEmoji}>{game.emoji}</Text>
-              <Text style={[styles.cardTitle, darkMode && styles.darkText]}>{game.title}</Text>
-              <Text style={[styles.cardBlurb, darkMode && styles.darkMutedText]}>{game.blurb}</Text>
-                            <View style={styles.levelRow}>
-                {LEVELS.map((level) => {
-                  const done = isDone(activeUnit.id, game.id, level);
-                  const unlocked =
-                    lessonProgressReady &&
-                    (level === 1 || isDone(activeUnit.id, game.id, level - 1));
-                  return (
-                    <Pressable
-                      key={level}
-                      disabled={!unlocked}
-                      onPress={() =>
-                        setView({ kind: "game", unitId: activeUnit.id, gameId: game.id, level })
-                      }
-                      style={[
-                        styles.levelBtn,
-                        done && styles.levelBtnDone,
-                        !unlocked && styles.levelBtnLocked,
-                      ]}
-                    >
-                      <Text style={styles.levelStar}>{done ? "⭐" : unlocked ? "▶" : "🔒"}</Text>
-                      <Text style={[styles.levelText, darkMode && styles.darkText]}>{LEVEL_LABELS[level - 1]}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ))}
-
-          <View style={[styles.badgeCard, darkMode && styles.darkCard]}>
-            <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
-              {unitStars(activeUnit) === activeUnit.games.length * LEVELS.length
-                ? "🏅 Unit badge earned!"
-                : "🏅 Finish every level to earn the unit badge"}
-            </Text>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // ----- Unit picker -----
+export default function GradeOneLessonsScreen(props: GradeScreenProps) {
   return (
     <LessonTrailScreen
       {...props}
