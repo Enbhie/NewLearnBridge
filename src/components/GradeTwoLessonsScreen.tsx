@@ -389,6 +389,13 @@ export default function GradeTwoLessonsScreen({
     : miniGameCheckpoint === "mid-quiz"
       ? 2
       : 3;
+  const questionCount =
+    activeSubject && activeLesson
+      ? (
+          gradeTwoLessonQuizBanks[activeLesson.miniGame]?.[difficulty] ??
+          gradeTwoQuizBanks[activeSubject.id][difficulty]
+        ).length
+      : 0;
 
   useEffect(() => {
     const newlyCompleted = completedLessonIds.find(
@@ -507,11 +514,36 @@ export default function GradeTwoLessonsScreen({
           <View style={styles.lessonContent}>
             {finished ? (
               <View style={[styles.finishCard, darkMode && styles.darkCard]}>
-                <Text style={styles.finishEmoji}>⭐</Text>
-                <Text style={[styles.cardTitle, darkMode && styles.darkText]}>Level complete!</Text>
-                <Text style={[styles.finishHint, darkMode && styles.darkMutedText]}>
-                  {difficultyLabels[difficulty]} complete! Great work finishing this quarter.
+                <View style={styles.finishTrophyCircle}>
+                  <Text style={styles.finishEmoji}>🏆</Text>
+                </View>
+                <Text style={[styles.finishTitle, darkMode && styles.darkText]}>
+                  Quarter complete!
                 </Text>
+                <Text style={[styles.finishHint, darkMode && styles.darkMutedText]}>
+                  Great work finishing {activeSubject.title} on {difficultyLabels[difficulty]} difficulty!
+                </Text>
+                <Text style={styles.finishStars}>⭐⭐⭐</Text>
+                <View style={styles.finishStats}>
+                  <View style={[styles.finishStat, darkMode && styles.darkFinishStat]}>
+                    <Text style={styles.finishStatEmoji}>✅</Text>
+                    <Text style={[styles.finishStatLabel, darkMode && styles.darkMutedText]}>
+                      Questions
+                    </Text>
+                    <Text style={[styles.finishStatValue, darkMode && styles.darkText]}>
+                      {questionCount}
+                    </Text>
+                  </View>
+                  <View style={[styles.finishStat, darkMode && styles.darkFinishStat]}>
+                    <Text style={styles.finishStatEmoji}>🎯</Text>
+                    <Text style={[styles.finishStatLabel, darkMode && styles.darkMutedText]}>
+                      Difficulty
+                    </Text>
+                    <Text style={[styles.finishStatValue, darkMode && styles.darkText]}>
+                      {difficultyLabels[difficulty]}
+                    </Text>
+                  </View>
+                </View>
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => startLesson(activeLesson)}
@@ -804,9 +836,18 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900", textAlign: "center" },
   lockedCard: { backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 18, borderWidth: 1.5, padding: 18 },
   hintText: { color: "#8A4F20", fontSize: 14, fontWeight: "700", lineHeight: 21, marginTop: 12 },
-  finishCard: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#F4C451", borderRadius: 18, borderWidth: 1.5, padding: 22 },
-  finishEmoji: { fontSize: 54, marginBottom: 10 },
-  finishHint: { color: "#536D79", fontSize: 14, fontWeight: "700", marginTop: 8, textAlign: "center" },
+  finishCard: { alignItems: "center", backgroundColor: "#315C4A", borderColor: "#315C4A", borderRadius: 20, borderWidth: 1.5, padding: 22 },
+  finishTrophyCircle: { alignItems: "center", backgroundColor: "#FFFDF5", borderRadius: 34, height: 68, justifyContent: "center", width: 68 },
+  finishEmoji: { fontSize: 38 },
+  finishTitle: { color: "#FFFDF5", fontSize: 25, fontWeight: "900", marginTop: 12, textAlign: "center" },
+  finishHint: { color: "#FFFDF5", fontSize: 14, fontWeight: "700", lineHeight: 21, marginTop: 6, opacity: 0.9, textAlign: "center" },
+  finishStars: { fontSize: 21, marginTop: 10 },
+  finishStats: { flexDirection: "row", gap: 10, marginTop: 16, width: "100%" },
+  finishStat: { alignItems: "center", backgroundColor: "#FFFDF5", borderRadius: 14, flex: 1, paddingHorizontal: 8, paddingVertical: 10 },
+  darkFinishStat: { backgroundColor: "#34425A" },
+  finishStatEmoji: { fontSize: 18 },
+  finishStatLabel: { color: "#6E8190", fontSize: 11, fontWeight: "700", marginTop: 3 },
+  finishStatValue: { color: "#173B53", fontSize: 14, fontWeight: "900", marginTop: 2, textAlign: "center" },
   questionCard: { backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 18, borderWidth: 1.5, padding: 18 },
   questionHeading: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   questionCount: { color: "#258EA3", fontSize: 15, fontWeight: "900" },

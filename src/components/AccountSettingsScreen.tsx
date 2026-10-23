@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import {
     Alert,
     Modal,
@@ -119,6 +119,9 @@ export default function AccountSettingsScreen({
   const [grade, setGrade] = useState<Grade>("K");
   const [profileError, setProfileError] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [savingGradeProfileId, setSavingGradeProfileId] = useState<string | null>(null);
+  const [isWaitingForGradeSave, setIsWaitingForGradeSave] = useState(false);
+  const pendingGradeSaveRef = useRef<Promise<boolean> | null>(null);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
@@ -134,6 +137,39 @@ export default function AccountSettingsScreen({
     if (part === "day") setDay(nextValue);
     if (part === "year") setYear(nextValue);
     setProfileError("");
+  };
+
+  const handleSetProfileGrade = (profileId: string, nextGrade: Grade): Promise<boolean> => {
+    if (pendingGradeSaveRef.current) return pendingGradeSaveRef.current;
+
+    setSavingGradeProfileId(profileId);
+    const savePromise = onSetProfileGrade(profileId, nextGrade)
+      .then(() => true)
+      .catch((error: unknown) => {
+        Alert.alert(
+          "Grade not saved",
+          error instanceof Error ? error.message : "Check device storage and try again."
+        );
+        return false;
+      })
+      .finally(() => {
+        if (pendingGradeSaveRef.current === savePromise) {
+          pendingGradeSaveRef.current = null;
+        }
+        setSavingGradeProfileId(null);
+      });
+    pendingGradeSaveRef.current = savePromise;
+    return savePromise;
+  };
+
+  const handleBack = async () => {
+    setIsWaitingForGradeSave(true);
+    try {
+      const saved = await pendingGradeSaveRef.current;
+      if (saved !== false) onBack();
+    } finally {
+      setIsWaitingForGradeSave(false);
+    }
   };
 
   const handleAddProfile = async () => {
@@ -228,14 +264,19 @@ export default function AccountSettingsScreen({
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Pressable
           accessibilityRole="button"
-          onPress={onBack}
+          accessibilityState={{ disabled: isWaitingForGradeSave }}
+          disabled={isWaitingForGradeSave}
+          onPress={() => void handleBack()}
           style={({ pressed }) => [
             styles.backButton,
             darkMode && styles.darkBackButton,
+            isWaitingForGradeSave && styles.disabled,
             pressed && styles.pressed,
           ]}
         >
-          <Text style={[styles.backText, darkMode && styles.darkBackText]}>← Back</Text>
+          <Text style={[styles.backText, darkMode && styles.darkBackText]}>
+            {isWaitingForGradeSave ? "Saving grade..." : "← Back"}
+          </Text>
         </Pressable>
         <View style={[styles.pageHero, darkMode && styles.darkPageHero]}>
           <View style={[styles.heroIcon, darkMode && styles.darkHeroIcon]}>
@@ -290,61 +331,65 @@ export default function AccountSettingsScreen({
           {profiles.map((profile) => {
             const isActive = profile.id === activeProfileId;
             return (
-              <Pressable
-                key={profile.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isActive }}
-                onPress={() => onSelectProfile(profile.id)}
-                style={[styles.profileRow, isActive && styles.profileRowSelected]}
-              >
-                <Text style={styles.profileIcon}>{profile.selectedIcon}</Text>
-                <View style={styles.profileCopy}>
-                  <Text style={styles.profileName}>{profile.childName}</Text>
-                  <Text style={styles.hint}>
-                    Age {getAgeFromParts(
-                      profile.childBirthdate.slice(5, 7),
-                      profile.childBirthdate.slice(8, 10),
-                      profile.childBirthdate.slice(0, 4)
-                    ) ?? "Not set"} · {profile.grade ? gradeLabels[profile.grade] : "Grade not set"}
-                  </Text>
+              <View key={profile.id}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  onPress={() => onSelectProfile(profile.id)}
+                  style={[styles.profileRow, isActive && styles.profileRowSelected]}
+                >
+                  <Text style={styles.profileIcon}>{profile.selectedIcon}</Text>
+                  <View style={styles.profileCopy}>
+                    <Text style={styles.profileName}>{profile.childName}</Text>
+                    <Text style={styles.hint}>
+                      Age {getAgeFromParts(
+                        profile.childBirthdate.slice(5, 7),
+                        profile.childBirthdate.slice(8, 10),
+                        profile.childBirthdate.slice(0, 4)
+                      ) ?? "Not set"} · {profile.grade ? gradeLabels[profile.grade] : "Grade not set"}
+                    </Text>
+                  </View>
+                  {isActive && <Text style={styles.activeLabel}>ACTIVE</Text>}
+                </Pressable>
+                <View style={styles.profileGradeEditor}>
+                  <Text style={styles.bodyLabel}>Grade level for {profile.childName}</Text>
+                  <View style={styles.gradeRow}>
+                    {(Object.keys(gradeLabels) as Grade[]).map((grade) => {
+                      const selected = profile.grade === grade;
+                      return (
+                        <Pressable
+                          key={grade}
+                          accessibilityRole="button"
+                          accessibilityState={{
+                            selected,
+                            disabled: savingGradeProfileId !== null,
+                          }}
+                          disabled={savingGradeProfileId !== null}
+                          onPress={() => {
+                            if (!selected) void handleSetProfileGrade(profile.id, grade);
+                          }}
+                          style={[
+                            styles.gradeOption,
+                            selected && styles.gradeOptionSelected,
+                            savingGradeProfileId !== null && styles.disabled,
+                          ]}
+                        >
+                          <Text style={[styles.gradeOptionText, selected && styles.gradeOptionTextSelected]}>
+                            {gradeLabels[grade]}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {savingGradeProfileId === profile.id ? (
+                    <Text accessibilityLiveRegion="polite" style={styles.hint}>
+                      Saving grade...
+                    </Text>
+                  ) : null}
                 </View>
-                {isActive && <Text style={styles.activeLabel}>ACTIVE</Text>}
-              </Pressable>
+              </View>
             );
           })}
-          {profiles.find((profile) => profile.id === activeProfileId) ? (
-            <View style={styles.profileGradeEditor}>
-              <Text style={styles.bodyLabel}>Grade level for {profiles.find((profile) => profile.id === activeProfileId)?.childName}</Text>
-              <View style={styles.gradeRow}>
-                {(Object.keys(gradeLabels) as Grade[]).map((grade) => {
-                  const activeProfile = profiles.find((profile) => profile.id === activeProfileId);
-                  const selected = activeProfile?.grade === grade;
-                  return (
-                    <Pressable
-                      key={grade}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      onPress={() => {
-                        if (activeProfileId && !selected) {
-                          void onSetProfileGrade(activeProfileId, grade).catch((error: unknown) => {
-                            Alert.alert(
-                              "Grade not saved",
-                              error instanceof Error ? error.message : "Check device storage and try again."
-                            );
-                          });
-                        }
-                      }}
-                      style={[styles.gradeOption, selected && styles.gradeOptionSelected]}
-                    >
-                      <Text style={[styles.gradeOptionText, selected && styles.gradeOptionTextSelected]}>
-                        {gradeLabels[grade]}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
           {!showAddProfile ? (
             <Pressable
               accessibilityRole="button"
@@ -485,7 +530,7 @@ export default function AccountSettingsScreen({
               })}
             </View>
             <Text style={styles.hint}>
-              Changing this limit will not reset today's usage. Counts active LearnBridge use and resets at local midnight. A 5-minute eye-rest break begins every 15 active minutes; break time is not counted.
+              This limit applies across all grade levels. Choosing a limit also enables 5-minute eye-rest breaks every 15 active minutes; break time is not counted. Selecting No limit disables both limits and breaks. Usage resets at local midnight.
             </Text>
           </View>
           <View style={styles.preferenceRow}>

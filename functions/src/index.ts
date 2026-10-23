@@ -34,6 +34,118 @@ const missionDetails: Record<string, { title: string; parentCheck: string }> = {
     parentCheck:
       "Look at the photo and confirm your child's first name is traced on the paper.",
   },
+  "G1-2": {
+    title: "Savings Count",
+    parentCheck: "Written total is correct.",
+  },
+  "G1-3": {
+    title: "Living or Non-Living",
+    parentCheck: "Sorting of all 10 items is correct.",
+  },
+  "G1-5": {
+    title: "Day and Night",
+    parentCheck: "Drawing has both morning and night parts.",
+  },
+  "G1-7": {
+    title: "Parts of Speech Hunt",
+    parentCheck: "All words are placed in the correct categories.",
+  },
+  "G2-2": {
+    title: "Savings Challenge",
+    parentCheck: "Daily totals are added correctly.",
+  },
+  "G2-4": {
+    title: "Living or Non-Living: Advanced",
+    parentCheck: "Sorting and explanation are both correct.",
+  },
+  "G2-6": {
+    title: "Day-Night Journal",
+    parentCheck: "4 activities total, correctly split morning/night.",
+  },
+  "G2-7": {
+    title: "Weather Tracker",
+    parentCheck: "All 3 days logged, child explains each.",
+  },
+  "G2-8": {
+    title: "Words at Home Hunt",
+    parentCheck: "Words correctly categorized, child uses one in a sentence.",
+  },
+  "G2-9": {
+    title: "Simple Sentence",
+    parentCheck: "Sentences make sense, adjective identified.",
+  },
+  "G2-10": {
+    title: "Story Timeline",
+    parentCheck:
+      "The three events are placed in a sensible order and the child retells the story.",
+  },
+  "G2-11": {
+    title: "Clue Detective",
+    parentCheck:
+      "The child points to story details that identify the character and setting.",
+  },
+  "G2-12": {
+    title: "Feelings in a Story",
+    parentCheck:
+      "The child names the feeling and explains which words or events gave the clue.",
+  },
+  "G2-13": {
+    title: "Build a Number",
+    parentCheck:
+      "The model has the right number of hundreds, tens, and ones and matches the number.",
+  },
+  "G2-14": {
+    title: "Array Garden",
+    parentCheck: "The drawing has 3 rows of 4 flowers and the total is 12.",
+  },
+  "G2-15": {
+    title: "Pretend Snack Shop",
+    parentCheck:
+      "The child counts the pretend money and explains how it totals ₱25.",
+  },
+  "G2-16": {
+    title: "Living Things Sort",
+    parentCheck:
+      "The child sorts both examples correctly and gives one reason for each.",
+  },
+  "G2-17": {
+    title: "Water State Watch",
+    parentCheck:
+      "The child labels solid, liquid, and gas and gives a safe everyday example.",
+  },
+  "G2-18": {
+    title: "Day and Night Sky",
+    parentCheck:
+      "The child places the Sun in the day sky and the Moon or stars in the night sky.",
+  },
+  "G3-1": {
+    title: "Sharing Rice Cake",
+    parentCheck: "Child shows and explains each fraction correctly.",
+  },
+  "G3-3": {
+    title: "Equal Division",
+    parentCheck: "Each person receives the same amount.",
+  },
+  "G3-4": {
+    title: "Order of Operations Card",
+    parentCheck: "Working shown and answers are correct.",
+  },
+  "G3-5": {
+    title: "Calendar Detective",
+    parentCheck: "Counting is correct.",
+  },
+  "G3-6": {
+    title: "Roman Numeral Hunt",
+    parentCheck: "Child reads them correctly.",
+  },
+  "G3-7": {
+    title: "Food Chain Draw",
+    parentCheck: "Labels are correct.",
+  },
+  "G3-8": {
+    title: "Short Paragraph",
+    parentCheck: "Paragraph is read and signed off.",
+  },
 };
 
 type SubmissionStatus =
@@ -146,12 +258,18 @@ export const submitMissionForReview = onCall(
       missionId?: unknown;
       submissionId?: unknown;
       storagePath?: unknown;
+      submittedAt?: unknown;
     };
     const missionId = typeof data.missionId === "string" ? data.missionId : "";
     const submissionId =
       typeof data.submissionId === "string" ? data.submissionId : "";
     const storagePath =
       typeof data.storagePath === "string" ? data.storagePath : "";
+    const submittedAt =
+      typeof data.submittedAt === "string" &&
+      Number.isFinite(Date.parse(data.submittedAt))
+        ? Timestamp.fromDate(new Date(data.submittedAt))
+        : Timestamp.now();
     const mission = missionDetails[missionId];
 
     if (!mission) {
@@ -205,6 +323,7 @@ export const submitMissionForReview = onCall(
     const tokenHash = createHash("sha256").update(rawToken).digest("hex");
     const tokenRef = db.collection("missionReviewTokens").doc(tokenHash);
     const createdAt = Timestamp.now();
+    let shouldSendEmail = false;
 
     await db.runTransaction(async (transaction) => {
       const [submission, lock] = await Promise.all([
@@ -212,25 +331,47 @@ export const submitMissionForReview = onCall(
         transaction.get(lockRef),
       ]);
       if (submission.exists) {
-        throw new HttpsError("already-exists", "This mission submission was already sent.");
+        const existing = submission.data();
+        if (existing?.uid !== request.auth!.uid || existing?.missionId !== missionId) {
+          throw new HttpsError(
+            "permission-denied",
+            "This submission ID is already associated with another submission."
+          );
+        }
+        if (existing.status !== "email_failed") return;
+        if (lock.exists) {
+          throw new HttpsError(
+            "failed-precondition",
+            "A mission is already waiting for your parent. Finish that review first."
+          );
+        }
+        transaction.update(submissionRef, {
+          parentEmail,
+          status: "pending" satisfies SubmissionStatus,
+          updatedAt: createdAt,
+          storagePath,
+          clientSubmittedAt: submittedAt,
+        });
+      } else {
+        if (lock.exists) {
+          throw new HttpsError(
+            "failed-precondition",
+            "A mission is already waiting for your parent. Finish that review first."
+          );
+        }
+        transaction.create(submissionRef, {
+          uid: request.auth!.uid,
+          missionId,
+          title: mission.title,
+          parentCheck: mission.parentCheck,
+          parentEmail,
+          status: "pending" satisfies SubmissionStatus,
+          createdAt,
+          updatedAt: createdAt,
+          clientSubmittedAt: submittedAt,
+          storagePath,
+        });
       }
-      if (lock.exists) {
-        throw new HttpsError(
-          "failed-precondition",
-          "A mission is already waiting for your parent. Finish that review first."
-        );
-      }
-      transaction.create(submissionRef, {
-        uid: request.auth!.uid,
-        missionId,
-        title: mission.title,
-        parentCheck: mission.parentCheck,
-        parentEmail,
-        status: "pending" satisfies SubmissionStatus,
-        createdAt,
-        updatedAt: createdAt,
-        storagePath,
-      });
       transaction.create(lockRef, {
         submissionId,
         createdAt,
@@ -239,7 +380,10 @@ export const submitMissionForReview = onCall(
         submissionId,
         createdAt,
       });
+      shouldSendEmail = true;
     });
+
+    if (!shouldSendEmail) return { status: "pending" as const };
 
     try {
       const [photo] = await photoFile.download();
@@ -274,12 +418,6 @@ export const submitMissionForReview = onCall(
           transaction.delete(lockRef);
         }
         transaction.delete(tokenRef);
-      });
-      await photoFile.delete({ ignoreNotFound: true }).catch((deleteError) => {
-        logger.warn("Could not remove a failed mission photo upload", {
-          submissionId,
-          deleteError,
-        });
       });
       throw new HttpsError(
         "internal",

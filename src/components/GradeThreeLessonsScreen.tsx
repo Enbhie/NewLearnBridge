@@ -965,36 +965,21 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
             </View>
 
             <View style={styles.lessonList}>
-              {selectedSubject.name === "English"
-                ? englishLessons.map((lesson, index) => (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={lesson.id}
-                        onPress={() => openEnglishLesson(lesson)}
-                      style={styles.lessonCard}
-                    >
-                      <Text style={styles.lessonNumber}>{index + 1}</Text>
-                      <View style={styles.lessonCopy}>
-                        <Text style={styles.lessonName}>{lesson.title}</Text>
-                        <Text style={styles.mutedText}>
-                          {lesson.description}
-                        </Text>
-                      </View>
-                      <Text style={styles.lessonArrow}>Start →</Text>
-                    </Pressable>
-                  ))
-                : selectedSubject.lessons.map((lesson, index) => (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={lesson}
-                      onPress={() => setSelectedLesson(lesson)}
-                      style={styles.lessonCard}
-                    >
-                      <Text style={styles.lessonNumber}>{index + 1}</Text>
-                      <Text style={styles.lessonName}>{lesson}</Text>
-                      <Text style={styles.lessonArrow}>Start →</Text>
-                    </Pressable>
-                  ))}
+              {englishLessons.map((lesson, index) => (
+                <Pressable
+                  accessibilityRole="button"
+                  key={lesson.id}
+                  onPress={() => openEnglishLesson(lesson)}
+                  style={styles.lessonCard}
+                >
+                  <Text style={styles.lessonNumber}>{index + 1}</Text>
+                  <View style={styles.lessonCopy}>
+                    <Text style={styles.lessonName}>{lesson.title}</Text>
+                    <Text style={styles.mutedText}>{lesson.description}</Text>
+                  </View>
+                  <Text style={styles.lessonArrow}>Start →</Text>
+                </Pressable>
+              ))}
             </View>
           </>
         ) : selectedEnglishLesson ? (
