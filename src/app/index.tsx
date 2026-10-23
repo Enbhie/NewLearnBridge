@@ -184,6 +184,7 @@ type Mission = {
 
 function requiresParentEmailReview(mission: OfflineMission): boolean {
   return mission.submission === "photo";
+  return mission.grade === "2" || ["K-3", "K-4", "K-5"].includes(mission.id);
 }
 
 const missions: Mission[] = [
@@ -2090,6 +2091,10 @@ function MenuScreen({
                     </Pressable>
                   ) : null}
                 </View>
+              {mission.grade === "2" ? (
+                <Text style={styles.missionPhotoInstruction}>
+                  📷 Take a photo of your work to send to your parent for approval.
+                </Text>
               ) : null}
               <ActionButton onPress={() => startMission(mission)}>
                 {done ? "DO IT AGAIN" : "START MISSION"}
@@ -3779,6 +3784,7 @@ const styles = StyleSheet.create({
   missionContinueButton: { minHeight: 48, backgroundColor: "#258EA3", borderRadius: 12, alignItems: "center", justifyContent: "center", marginTop: 20, paddingHorizontal: 18 },
   missionContinueButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   photoReviewHeading: { color: "#173B53", fontSize: 15, fontWeight: "900", marginTop: 6, marginBottom: 8, textAlign: "center" },
+  missionPhotoInstruction: { color: "#397147", fontSize: 13, lineHeight: 19, fontWeight: "800", marginTop: 8 },
   missionPhotoPreview: { width: "100%", height: 220, borderRadius: 12, backgroundColor: "#EAF5F7", marginBottom: 10 },
   missionPhotoPlaceholder: { width: "100%", height: 110, alignItems: "center", justifyContent: "center", backgroundColor: "#EAF5F7", borderRadius: 12, marginBottom: 10 },
   missionPhotoPlaceholderText: { color: "#36566A", fontSize: 15, fontWeight: "800" },
