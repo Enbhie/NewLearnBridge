@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
-import { StatusBar, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import CloudBackdrop, {
   AppAppearanceContext,
   CloudBackdropVisibilityContext,
@@ -23,10 +24,7 @@ export default function App() {
     <ThemeProvider value={navigationTheme}>
       <AppAppearanceContext.Provider value={{ darkMode, setDarkMode }}>
         <View style={[styles.root, darkMode ? styles.nightRoot : styles.dayRoot]}>
-          <StatusBar
-            barStyle={darkMode ? "light-content" : "dark-content"}
-            backgroundColor={darkMode ? "#101936" : "#73D3EA"}
-          />
+          <StatusBar style={darkMode ? "light" : "dark"} />
           <CloudBackdropVisibilityContext.Provider value={setShowCloudBackdrop}>
             {showCloudBackdrop ? <CloudBackdrop /> : null}
             <View style={styles.navigator}>

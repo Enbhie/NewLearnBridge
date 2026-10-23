@@ -9,6 +9,7 @@ import {
   View,
   useWindowDimensions,
   type LayoutRectangle,
+  type ViewInstance,
 } from "react-native";
 import * as Speech from "expo-speech";
 import { playFeedback } from "../utils/soundEffects";
@@ -108,7 +109,7 @@ export default function AlphabetWordGame({
   const [slots, setSlots] = useState<
     ((LayoutRectangle & { pageX: number; pageY: number }) | null)[]
   >([]);
-  const slotRefs = useRef<(View | null)[]>([]);
+  const slotRefs = useRef<(ViewInstance | null)[]>([]);
   const current = words[roundIndex];
   const letters = current.word.split("");
 

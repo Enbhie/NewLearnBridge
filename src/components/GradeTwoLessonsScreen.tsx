@@ -16,6 +16,7 @@ import {
 import type { CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { AppAppearanceContext } from "./CloudBackdrop";
+import LessonInstructionModal from "./LessonInstructionModal";
 import GradeTwoMiniGame, {
   gradeTwoMiniGameInfo,
   type GradeTwoMiniGameId,
@@ -329,7 +330,6 @@ function LessonQuestionChallenge({
 
 type Props = {
   difficulty: LessonDifficulty;
-  onDifficultyChange: (difficulty: LessonDifficulty) => void;
   onBack: () => void;
   onMusicCategoryChange: (category: CategoryId | null) => void;
   completedLessonIds: string[];
@@ -339,7 +339,6 @@ type Props = {
 
 export default function GradeTwoLessonsScreen({
   difficulty,
-  onDifficultyChange,
   onBack,
   onMusicCategoryChange,
   completedLessonIds,
@@ -471,7 +470,14 @@ export default function GradeTwoLessonsScreen({
 
   return (
     <SafeAreaView style={[styles.screen, darkMode && styles.darkScreen]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.content,
+          activeLesson && styles.lessonScreenContent,
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <Pressable
           accessibilityRole="button"
           onPress={handleBack}
@@ -504,57 +510,18 @@ export default function GradeTwoLessonsScreen({
                 <Text style={styles.finishEmoji}>⭐</Text>
                 <Text style={[styles.cardTitle, darkMode && styles.darkText]}>Level complete!</Text>
                 <Text style={[styles.finishHint, darkMode && styles.darkMutedText]}>
-                  {difficulty === "challenge"
-                    ? "Challenge complete! All 10 questions done. Replay or continue."
-                    : `${difficultyLabels[difficulty]} complete! All 10 questions done. Choose a harder level or continue.`}
+                  {difficultyLabels[difficulty]} complete! Great work finishing this quarter.
                 </Text>
-                <View style={styles.difficultyControls}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      difficulty === "challenge"
-                        ? "Play this lesson again"
-                        : `Try ${difficulty === "easy" ? "standard" : "challenge"} difficulty`
-                    }
-                    onPress={() => {
-                      if (difficulty !== "challenge") {
-                        onDifficultyChange(difficulty === "easy" ? "standard" : "challenge");
-                      }
-                      startLesson(activeLesson);
-                    }}
-                    style={({ pressed }) => [
-                      styles.difficultyButton,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.difficultyButtonText}>
-                      {difficulty === "challenge"
-                        ? "↻ PLAY AGAIN"
-                        : `↑ TRY ${difficulty === "easy" ? "STANDARD" : "CHALLENGE"}`}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={nextLesson ? "Continue to next quarter" : "Back to lessons"}
-                    onPress={() => {
-                      if (nextLesson) {
-                        startLesson(nextLesson);
-                      } else {
-                        setActiveLesson(null);
-                        setLessonStarted(false);
-                        resetGame();
-                      }
-                    }}
-                    style={({ pressed }) => [
-                      styles.continueButton,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.difficultyButtonText}>
-                      {nextLesson ? "NEXT QUARTER →" : "BACK TO LESSONS"}
-                    </Text>
-                  </Pressable>
-                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => startLesson(activeLesson)}
+                  style={({ pressed }) => [
+                    styles.replayButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.replayButtonText}>↻ PLAY AGAIN</Text>
+                </Pressable>
               </View>
             ) : isLessonLocked ? (
               <View style={[styles.lockedCard, darkMode && styles.darkCard]}>
@@ -566,57 +533,7 @@ export default function GradeTwoLessonsScreen({
                     : "Finish the earlier quarter on this subject trail to play this challenge."}
                 </Text>
               </View>
-            ) : !lessonStarted ? (
-              <View style={[styles.instructionCard, darkMode && styles.darkCard]}>
-                <Text style={styles.instructionEyebrow}>BEFORE YOU START</Text>
-                <Text style={styles.instructionEmoji}>
-                  {gradeTwoMiniGameInfo[activeLesson.miniGame].emoji}
-                </Text>
-                <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
-                  {gradeTwoMiniGameInfo[activeLesson.miniGame].title}
-                </Text>
-                <Text style={[styles.bodyText, darkMode && styles.darkMutedText]}>
-                  Answer each question correctly to move through the challenge.
-                </Text>
-                <Text style={[styles.bodyText, darkMode && styles.darkMutedText]}>
-                  {activeLesson.overview}
-                </Text>
-                <Text style={[styles.levelHeading, darkMode && styles.darkMutedText]}>
-                  Choose your level · 10 questions
-                </Text>
-                <View style={styles.levelOptions}>
-                  {(["easy", "standard", "challenge"] as const).map((level) => (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: difficulty === level }}
-                      key={level}
-                      onPress={() => onDifficultyChange(level)}
-                      style={({ pressed }) => [
-                        styles.levelOption,
-                        difficulty === level && styles.selectedLevelOption,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.levelOptionText,
-                          difficulty === level && styles.selectedLevelOptionText,
-                        ]}
-                      >
-                        {difficultyLabels[level]}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setLessonStarted(true)}
-                  style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.primaryButtonText}>LET&apos;S PLAY!</Text>
-                </Pressable>
-              </View>
-            ) : (
+            ) : lessonStarted ? (
               <>
                 <View style={[styles.learnCard, darkMode && styles.darkCard]}>
                   <Text style={[styles.cardTitle, darkMode && styles.darkText]}>Learn it</Text>
@@ -670,7 +587,7 @@ export default function GradeTwoLessonsScreen({
                   />
                 )}
               </>
-            )}
+            ) : null}
           </View>
         ) : activeSubject ? (
           <View style={styles.trail}>
@@ -794,13 +711,52 @@ export default function GradeTwoLessonsScreen({
           </View>
         )}
       </ScrollView>
+      {activeLesson && finished ? (
+        <View style={[styles.quarterFooter, darkMode && styles.darkFooter]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={nextLesson ? "Continue to next quarter" : "Back to lessons"}
+            onPress={() => {
+              if (nextLesson) {
+                startLesson(nextLesson);
+              } else {
+                setActiveLesson(null);
+                setLessonStarted(false);
+                resetGame();
+              }
+            }}
+            style={({ pressed }) => [
+              styles.continueButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={styles.difficultyButtonText}>
+              {nextLesson ? "NEXT QUARTER →" : "BACK TO LESSONS"}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <LessonInstructionModal
+        visible={Boolean(activeLesson && !lessonStarted && !isLessonLocked && !finished)}
+        title={activeLesson ? gradeTwoMiniGameInfo[activeLesson.miniGame].title : ""}
+        instruction={
+          activeLesson
+            ? `Play ${gradeTwoMiniGameInfo[activeLesson.miniGame].title}, then answer questions to finish this quarter.`
+            : ""
+        }
+        emoji={activeLesson ? gradeTwoMiniGameInfo[activeLesson.miniGame].emoji : ""}
+        onStart={() => setLessonStarted(true)}
+        onRequestClose={handleBack}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "transparent" },
+  scrollView: { flex: 1 },
   content: { padding: 20, paddingBottom: 36 },
+  lessonScreenContent: { flexGrow: 1 },
   backButton: { alignSelf: "flex-start", minHeight: 42, minWidth: 64, borderRadius: 8, backgroundColor: "#C62828", alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
   backButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
   header: { alignItems: "center", backgroundColor: "#DDF5F2", borderRadius: 20, marginBottom: 20, padding: 22 },
@@ -839,15 +795,6 @@ const styles = StyleSheet.create({
   lessonArrow: { color: "#258EA3", fontSize: 24, fontWeight: "800" },
   lessonContent: { gap: 12 },
   learnCard: { backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 18, borderWidth: 1.5, padding: 18 },
-  instructionCard: { alignItems: "stretch", backgroundColor: "#FFF7DD", borderColor: "#F4C451", borderRadius: 20, borderWidth: 1.5, padding: 20 },
-  instructionEyebrow: { color: "#258EA3", fontSize: 11, fontWeight: "900", letterSpacing: 1, textAlign: "center" },
-  instructionEmoji: { alignSelf: "center", fontSize: 56, marginBottom: 8 },
-  levelHeading: { color: "#36566A", fontSize: 13, fontWeight: "800", marginTop: 16, textAlign: "center" },
-  levelOptions: { flexDirection: "row", gap: 8, marginTop: 8 },
-  levelOption: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 12, borderWidth: 1.5, flex: 1, justifyContent: "center", minHeight: 42, paddingHorizontal: 6 },
-  selectedLevelOption: { backgroundColor: "#258EA3", borderColor: "#258EA3" },
-  levelOptionText: { color: "#36566A", fontSize: 12, fontWeight: "800" },
-  selectedLevelOptionText: { color: "#FFFFFF" },
   cardTitle: { color: "#173B53", fontSize: 20, fontWeight: "900" },
   bodyText: { color: "#36566A", fontSize: 15, lineHeight: 22, marginTop: 7 },
   topicRow: { flexDirection: "row", gap: 8, marginTop: 12 },
@@ -876,9 +823,11 @@ const styles = StyleSheet.create({
   questionFeedback: { fontSize: 14, fontWeight: "800", lineHeight: 20, marginTop: 12, textAlign: "center" },
   correctFeedback: { color: "#315C4A" },
   retryFeedback: { color: "#A94D3D" },
-  difficultyControls: { flexDirection: "row", gap: 12, marginTop: 12, width: "100%" },
-  difficultyButton: { alignItems: "center", backgroundColor: "#258EA3", borderRadius: 13, flex: 1, justifyContent: "center", minHeight: 50, paddingHorizontal: 10 },
-  continueButton: { alignItems: "center", backgroundColor: "#315C4A", borderRadius: 13, flex: 1, justifyContent: "center", minHeight: 50, paddingHorizontal: 10 },
+  replayButton: { alignItems: "center", backgroundColor: "#258EA3", borderRadius: 13, justifyContent: "center", marginTop: 16, minHeight: 50, paddingHorizontal: 18 },
+  replayButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+  quarterFooter: { backgroundColor: "#FFFFFF", borderTopColor: "#CDEEF1", borderTopWidth: 1, paddingHorizontal: 20, paddingVertical: 12 },
+  darkFooter: { backgroundColor: "#303D55", borderTopColor: "#465671" },
+  continueButton: { alignItems: "center", backgroundColor: "#315C4A", borderRadius: 13, justifyContent: "center", minHeight: 52, paddingHorizontal: 10 },
   difficultyButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   pressed: { opacity: 0.72 },
   darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },

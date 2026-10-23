@@ -1,4 +1,4 @@
-﻿{
+{
   "expo": {
     "name": "LearnBridge",
     "slug": "LearnBridge",
@@ -20,7 +20,8 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA"
-      ]
+      ],
+      "package": "com.pritongmanok.LearnBridge"
     },
     "web": {
       "output": "static",
@@ -59,7 +60,8 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 96
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -71,9 +73,7 @@
         "projectId": "87af994d-f085-4ea8-97f0-704929fef6a0"
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "58.0.0",
     "updates": {
       "url": "https://u.expo.dev/87af994d-f085-4ea8-97f0-704929fef6a0"
     }

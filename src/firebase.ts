@@ -3,7 +3,7 @@ import { FirebaseApp, getApp, getApps, initializeApp } from "firebase/app";
 import { Auth, getAuth, initializeAuth } from "firebase/auth";
 // @ts-ignore - exists at runtime on React Native, missing from the type definitions
 import { getReactNativePersistence } from "firebase/auth";
-import { Firestore, getFirestore } from "firebase/firestore";
+import { Firestore, getFirestore, initializeFirestore } from "firebase/firestore";
 import { FirebaseStorage, getStorage } from "firebase/storage";
 import { Functions, getFunctions } from "firebase/functions";
 import { Platform } from "react-native";
@@ -48,7 +48,12 @@ if (firebaseConfigured) {
     }
   }
 
-  firebaseFirestore = getFirestore(firebaseApp);
+  firebaseFirestore =
+    Platform.OS === "web"
+      ? getFirestore(firebaseApp)
+      : initializeFirestore(firebaseApp, {
+          experimentalForceLongPolling: true,
+        });
   firebaseStorage = getStorage(firebaseApp);
   firebaseFunctions = getFunctions(firebaseApp, "us-central1");
 }

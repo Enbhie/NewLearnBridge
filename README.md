@@ -26,10 +26,26 @@ In the output, you'll find options to open the app in a
 ## Firebase Authentication
 
 1. In the Firebase Console, create a project, add a Web app, and enable **Email/Password** under Authentication > Sign-in method.
-2. Copy `.env.example` to `.env.local` and fill in the Firebase Web app's API key, Auth domain, project ID, and app ID. The Storage bucket is required for parent mission photo review; sender ID is optional.
-3. Restart Expo after changing the environment file. New accounts receive Firebase's email verification link and must verify before opening the main menu.
+2. For local development, put the Firebase Web app values in `.env.local` using the `EXPO_PUBLIC_FIREBASE_*` variable names. Restart Expo after changing the file.
+3. For EAS APK builds, add these variables once in the EAS project dashboard under **Project settings > Environment variables**:
+   - `EXPO_PUBLIC_FIREBASE_API_KEY`
+   - `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`
+   - `EXPO_PUBLIC_FIREBASE_PROJECT_ID`
+   - `EXPO_PUBLIC_FIREBASE_APP_ID`
+   - `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`
+   - `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 
-Learner profiles are stored locally on the device under the Firebase user ID. Firebase Auth does not send numeric email codes; the verification flow uses Firebase's built-in link.
+   Set them in the **preview** environment for `eas build --profile preview --platform android` APKs and in **production** for production builds. Use plain-text visibility: `EXPO_PUBLIC_` values are bundled into the app and are not secrets. The `.env.local` file is intentionally ignored by Git and is not uploaded to remote EAS builds. Once these EAS variables are saved, future APK builds use them automatically; rebuild and reinstall the APK after setting them.
+   After upgrading Expo or other native dependencies, build and install a new APK or development client before using the updated JavaScript. The SDK 58 runtime version prevents EAS Updates from sending SDK 58 code to older binaries.
+4. New accounts receive Firebase's email verification link and must verify before opening the main menu.
+
+Learner profiles are stored in Cloud Firestore under the signed-in parent account and cached locally on the device. Existing local profiles are copied to Firestore the first time the parent signs in after this update. Deploy the updated Firestore rules before using cloud profile sync:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+Firebase Auth does not send numeric email codes; the verification flow uses Firebase's built-in link.
 
 ## Grade 2 online lessons
 

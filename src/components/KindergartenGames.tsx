@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Animated, PanResponder, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ViewInstance,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { playFeedback } from "../utils/soundEffects";
@@ -440,8 +448,8 @@ export function SafeCrossingGame({ level, onExit, onPassed }: GameProps) {
 // ---------- Drag-and-drop primitives (PanResponder, no extra libraries) ----------
 
 export function useSlots() {
-  const refs = useRef<Record<string, View | null>>({});
-  const register = (key: string) => (node: View | null) => {
+  const refs = useRef<Record<string, ViewInstance | null>>({});
+  const register = (key: string) => (node: ViewInstance | null) => {
     refs.current[key] = node;
   };
   // Returns every registered slot that contains the given screen point.
