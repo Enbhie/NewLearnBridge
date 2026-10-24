@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { Difficulty } from "./AccountSettingsScreen";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import AlphabetWordGame from "./AlphabetWordGame";
@@ -9,7 +9,9 @@ import {
   quizQuestions,
   type CategoryId,
 } from "../data/learningContent";
+import { awardModuleBadge } from "../data/badges";
 import { playFeedback } from "../utils/soundEffects";
+import AnimatedLearningSticker from "./AnimatedLearningSticker";
 import { AppAppearanceContext } from "./CloudBackdrop";
 
 type Question = {
@@ -39,6 +41,7 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
+  const [lessonLocked, setLessonLocked] = useState(false);
   const [answers, setAnswers] = useState<
     { label: string; answer: string; correct: boolean }[]
   >([]);
@@ -61,9 +64,13 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
   }));
   const question = questions[index];
   const isCorrect = selected === question.correctAnswer;
-  const illustration = category === "math"
-    ? ["🦉", "🏪", "🪙"]
-    : ["🦉", "🌱", "☀️"];
+  const resetLesson = () => {
+    setIndex(0);
+    setSelected(null);
+    setChecked(false);
+    setLessonLocked(false);
+    setAnswers([]);
+  };
 
   const getOptionStyle = (option: string) => {
     if (!checked) return selected === option ? styles.optionSelected : styles.option;
@@ -73,13 +80,19 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
   };
 
   const handleCheck = () => {
-    if (!selected) return;
+    if (!selected || lessonLocked) return;
     setChecked(true);
     if (isCorrect) {
       playFeedback("success");
     } else {
       playFeedback("error");
+      setLessonLocked(true);
     }
+  };
+
+  const handleRetryFromStart = () => {
+    resetLesson();
+    setAnswers([]);
   };
 
   const handleNext = () => {
@@ -93,11 +106,25 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
     ];
 
     if (index + 1 >= questions.length) {
-      onFinish({
+      const finalResults = {
         correct: updatedAnswers.filter((answer) => answer.correct).length,
         total: questions.length,
         breakdown: updatedAnswers,
+      };
+
+      void awardModuleBadge({
+        moduleId: `module:${category}`,
+        title: `${lessonContent[category].title} badge`,
+        summary: `${lessonContent[category].title}: ${lessonContent[category].rememberText} Result: ${finalResults.correct}/${finalResults.total} correct.`,
+        resultLabel: `${finalResults.correct}/${finalResults.total} correct`,
+      }).catch((error: unknown) => {
+        Alert.alert(
+          "Badge not saved",
+          error instanceof Error ? error.message : "Check device storage and try again."
+        );
       });
+
+      onFinish(finalResults);
       return;
     }
 
@@ -105,6 +132,7 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
     setIndex((current) => current + 1);
     setSelected(null);
     setChecked(false);
+    setLessonLocked(false);
   };
 
   return (
@@ -126,16 +154,21 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
         <Text style={styles.hearts}>❤️❤️❤️</Text>
       </View>
 
-      <View style={[styles.progressTrack, darkMode && styles.darkTrack]}>
-        <View style={styles.progressValue} />
+      <View
+        accessibilityLabel={`Quiz progress: ${index + 1} of ${questions.length}`}
+        accessibilityRole="progressbar"
+        accessibilityValue={{ min: 0, max: questions.length, now: index + 1 }}
+        style={[styles.progressTrack, darkMode && styles.darkTrack]}
+      >
+        <View style={[styles.progressValue, { width: `${((index + 1) / questions.length) * 100}%` }]} />
       </View>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={[styles.questionCard, darkMode && styles.darkCard]}>
-          <View style={styles.quizIllustration}>
-            <Text style={styles.quizOwl}>{illustration[0]}</Text>
-            <Text style={styles.quizShop}>{illustration[1]}</Text>
-            <Text style={styles.quizCoin}>{illustration[2]}</Text>
+          <View style={[styles.quizIllustration, darkMode && styles.darkIllustration]}>
+            <AnimatedLearningSticker variant="owl" size={78} />
+            <AnimatedLearningSticker variant="plant" size={68} />
+            <AnimatedLearningSticker variant="coin" size={58} />
           </View>
           <Text style={[styles.questionText, darkMode && styles.darkText]}>
             <Text style={styles.character}>{question.character}</Text> {question.prompt}
@@ -151,8 +184,8 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
             <Pressable
               key={option}
               accessibilityRole="button"
-              accessibilityState={{ selected: selected === option, disabled: checked }}
-              disabled={checked}
+             accessibilityState={{ selected: selected === option, disabled: checked || lessonLocked }}
+             disabled={checked || lessonLocked}
               soundEffect="select"
               onPress={() => setSelected(option)}
               style={({ pressed }) => [
@@ -166,42 +199,59 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
           ))}
         </View>
 
-        {!checked ? (
+        {lessonLocked ? (
+          <View style={[styles.lockedCard, darkMode && styles.darkHintCard]}>
+           <Text style={[styles.feedbackText, darkMode && styles.darkText]}>
+             Not quite. The correct answer is {category === "math" ? `₱${question.correctAnswer}` : question.correctAnswer}. Restart the lesson to try again from the beginning.
+           </Text>
+          </View>
+        ) : !checked ? (
           <View style={[styles.hintCard, darkMode && styles.darkHintCard]}>
-            <Text style={[styles.hintTitle, darkMode && styles.darkText]}>💭 Hint</Text>
-            <Text style={[styles.hintText, darkMode && styles.darkMutedText]}>{question.hint}</Text>
+           <Text style={[styles.hintTitle, darkMode && styles.darkText]}>💭 Hint</Text>
+           <Text style={[styles.hintText, darkMode && styles.darkMutedText]}>{question.hint}</Text>
           </View>
         ) : (
           <View style={[
-            styles.hintCard,
-            darkMode && styles.darkHintCard,
-            isCorrect ? styles.correctFeedback : styles.incorrectFeedback,
+           styles.hintCard,
+           darkMode && styles.darkHintCard,
+           isCorrect ? styles.correctFeedback : styles.incorrectFeedback,
+           darkMode && (isCorrect ? styles.darkCorrectFeedback : styles.darkIncorrectFeedback),
           ]}>
-            <Text style={[styles.feedbackText, darkMode && styles.darkText]}>
-              {isCorrect
-                ? "Tama! Great job!"
-                : `Not quite - the answer is ${category === "math" ? `₱${question.correctAnswer}` : question.correctAnswer}`}
-            </Text>
+           <Text style={[styles.feedbackText, darkMode && styles.darkText]}>
+             {isCorrect
+               ? "Tama! Great job!"
+               : `Not quite - the answer is ${category === "math" ? `₱${question.correctAnswer}` : question.correctAnswer}`}
+           </Text>
           </View>
         )}
       </ScrollView>
 
       <View style={[styles.footer, darkMode && styles.darkFooter]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !selected && !checked }}
-          disabled={!selected && !checked}
-          onPress={checked ? handleNext : handleCheck}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            !selected && !checked && styles.disabledButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.primaryButtonText}>
-            {checked ? "SEE RESULTS" : "CHECK ANSWER"}
-          </Text>
-        </Pressable>
+        {lessonLocked ? (
+          <Pressable
+           accessibilityRole="button"
+           onPress={handleRetryFromStart}
+           style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+          >
+           <Text style={styles.primaryButtonText}>RESTART LESSON</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+           accessibilityRole="button"
+           accessibilityState={{ disabled: !selected && !checked }}
+           disabled={!selected && !checked}
+           onPress={checked ? handleNext : handleCheck}
+           style={({ pressed }) => [
+             styles.primaryButton,
+             !selected && !checked && styles.disabledButton,
+             pressed && styles.pressed,
+           ]}
+          >
+           <Text style={styles.primaryButtonText}>
+             {checked ? "SEE RESULTS" : "CHECK ANSWER"}
+           </Text>
+          </Pressable>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -250,10 +300,7 @@ const styles = StyleSheet.create({
   },
   body: { padding: 20, paddingBottom: 24 },
   questionCard: { backgroundColor: "#FFEAA4", borderColor: "#F4C451", borderWidth: 2, borderRadius: 22, padding: 16 },
-  quizIllustration: { minHeight: 132, flexDirection: "row", alignItems: "center", justifyContent: "space-evenly", backgroundColor: "#B8EDF3", borderRadius: 18, marginBottom: 14 },
-  quizOwl: { fontSize: 70 },
-  quizShop: { fontSize: 66 },
-  quizCoin: { fontSize: 46, alignSelf: "flex-start", marginTop: 12 },
+  quizIllustration: { minHeight: 132, flexDirection: "row", alignItems: "center", justifyContent: "space-evenly", backgroundColor: "#B8EDF3", borderRadius: 22, marginBottom: 14, borderWidth: 2, borderColor: "#8BD4DF" },
   questionText: { color: "#173B53", fontSize: 18, lineHeight: 27, fontWeight: "600" },
   character: { fontWeight: "900" },
   equationBox: {
@@ -316,10 +363,20 @@ const styles = StyleSheet.create({
     padding: 14,
     marginTop: 20,
   },
+  lockedCard: {
+    backgroundColor: "#FFE4DB",
+    borderWidth: 1.5,
+    borderColor: "#F29D7A",
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 20,
+  },
   hintTitle: { color: "#173B53", fontSize: 16, fontWeight: "900" },
   hintText: { color: "#36566A", fontSize: 15, lineHeight: 22, marginTop: 3 },
   correctFeedback: { backgroundColor: "#BDECCF", borderColor: "transparent" },
   incorrectFeedback: { backgroundColor: "#FFDCCF", borderColor: "transparent" },
+  darkCorrectFeedback: { backgroundColor: "#22503B", borderColor: "#61B891" },
+  darkIncorrectFeedback: { backgroundColor: "#5B2A32", borderColor: "#D7776A" },
   feedbackText: { color: "#173B53", fontSize: 16, fontWeight: "900" },
   footer: { padding: 20, borderTopWidth: 1, borderTopColor: "#CDEEF1", backgroundColor: "#FFFFFF" },
   primaryButton: {
@@ -334,6 +391,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   darkScreen: { backgroundColor: "rgba(18, 29, 50, 0.32)" },
   darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkIllustration: { backgroundColor: "#29384C", borderColor: "#50617A" },
   darkOption: { backgroundColor: "#29364D", borderColor: "#54647D" },
   darkOptionSelected: { backgroundColor: "#394C68", borderColor: "#7897B0" },
   darkHintCard: { backgroundColor: "#29384C", borderColor: "#50617A" },

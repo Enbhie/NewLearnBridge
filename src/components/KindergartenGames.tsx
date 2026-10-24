@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Animated,
   PanResponder,
@@ -10,14 +10,18 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import { AppAppearanceContext } from "./CloudBackdrop";
 import { playFeedback } from "../utils/soundEffects";
 
-export type GameProps = { level: number; onExit: () => void; onPassed: () => void };
+export type GameProps = {
+  level: number;
+  onExit: () => void;
+  onPassed: () => void;
+  onMistake: () => void;
+};
 
 const LEVEL_LABELS = ["Easy", "Standard", "Challenge"];
 const ROUNDS = 3;
-const PASS_SCORE = 2; // "most answers right"
-
 export function shuffle<T>(items: T[]): T[] {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -65,12 +69,14 @@ export function ResultView({
   sub: string;
   onExit: () => void;
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
+
   return (
     <SafeAreaView style={styles.page}>
       <View style={styles.center}>
         <Text style={styles.bigEmoji}>{passed ? "🌟" : "💪"}</Text>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.sub}>{sub}</Text>
+        <Text style={[styles.title, darkMode && styles.darkText]}>{title}</Text>
+        <Text style={[styles.sub, darkMode && styles.darkMutedText]}>{sub}</Text>
         <Pressable onPress={onExit} style={styles.primaryBtn}>
           <Text style={styles.primaryBtnText}>BACK TO GAMES</Text>
         </Pressable>
@@ -88,6 +94,7 @@ export function ChoiceGame({
   level,
   onExit,
   onPassed,
+  onMistake,
   title,
   intro,
   buildRounds,
@@ -102,12 +109,34 @@ export function ChoiceGame({
   correctMsg: string;
   wrongMsg: string;
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const rounds = useMemo(() => buildRounds(level), [level, buildRounds]);
   const [round, setRound] = useState(0);
   const [chosen, setChosen] = useState<number | null>(null);
   const [score, setScore] = useState(0);
+  const [mistakes, setMistakes] = useState(0);
   const [finished, setFinished] = useState(false);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const current = rounds[round];
+
+  useEffect(
+    () => () => {
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    },
+    []
+  );
+
+  const next = (wasWrong = false) => {
+    const nextMistakes = mistakes + (wasWrong ? 1 : 0);
+    setMistakes(nextMistakes);
+    if (round + 1 >= ROUNDS) {
+      setFinished(true);
+      if (nextMistakes === 0) onPassed();
+      return;
+    }
+    setRound(round + 1);
+    setChosen(null);
+  };
 
   const pick = (index: number) => {
     if (chosen !== null) return;
@@ -115,25 +144,19 @@ export function ChoiceGame({
     const correct = current.options[index].correct;
     playFeedback(correct ? "success" : "error");
     if (correct) setScore((s) => s + 1);
-  };
-
-  const next = () => {
-    if (round + 1 >= ROUNDS) {
-      setFinished(true);
-      if (score >= PASS_SCORE) onPassed();
-      return;
+    else {
+      onMistake();
+      advanceTimer.current = setTimeout(() => next(true), 900);
     }
-    setRound(round + 1);
-    setChosen(null);
   };
 
   if (finished) {
-    const passed = score >= PASS_SCORE;
+    const passed = mistakes === 0;
     return (
       <ResultView
         passed={passed}
         title={passed ? "Great job!" : "Try again!"}
-        sub={`You got ${score} of ${ROUNDS} right.${passed ? " You earned a star!" : " Get 2 right to earn a star."}`}
+        sub={`You got ${score} of ${ROUNDS} right, with ${mistakes} ${mistakes === 1 ? "mistake" : "mistakes"}.${passed ? " You earned a star!" : " Try the whole lesson again for a perfect score."}`}
         onExit={onExit}
       />
     );
@@ -176,17 +199,21 @@ export function ChoiceGame({
 
       {chosen !== null ? (
         <>
-          <Text
-            style={[styles.feedback, current.options[chosen].correct ? styles.good : styles.bad]}
-          >
+          <Text style={[
+            styles.feedback,
+            current.options[chosen].correct ? styles.good : styles.bad,
+            darkMode && (current.options[chosen].correct ? styles.darkGood : styles.darkBad),
+          ]}>
             {current.options[chosen].note ??
               (current.options[chosen].correct ? correctMsg : wrongMsg)}
           </Text>
-          <Pressable onPress={next} style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnText}>
-              {round + 1 >= ROUNDS ? "SEE RESULTS" : "NEXT"}
-            </Text>
-          </Pressable>
+          {current.options[chosen].correct ? (
+            <Pressable onPress={() => next()} style={styles.primaryBtn}>
+              <Text style={styles.primaryBtnText}>
+                {round + 1 >= ROUNDS ? "SEE RESULTS" : "NEXT"}
+              </Text>
+            </Pressable>
+          ) : null}
         </>
       ) : null}
     </Frame>
@@ -320,14 +347,24 @@ export function PoliteKidsGame(props: GameProps) {
 
 // ---------- Safe Crossing ----------
 
-export function SafeCrossingGame({ level, onExit, onPassed }: GameProps) {
+export function SafeCrossingGame({ level, onExit, onPassed, onMistake }: GameProps) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const [round, setRound] = useState(0);
   const [light, setLight] = useState<"red" | "green">("red");
   const [left, setLeft] = useState(false);
   const [right, setRight] = useState(false);
   const [outcome, setOutcome] = useState<null | { safe: boolean; msg: string }>(null);
   const [score, setScore] = useState(0);
+  const [mistakes, setMistakes] = useState(0);
   const [finished, setFinished] = useState(false);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    },
+    []
+  );
 
   useEffect(() => {
     if (outcome !== null) return;
@@ -352,23 +389,12 @@ export function SafeCrossingGame({ level, onExit, onPassed }: GameProps) {
     };
   }, [round, outcome, level]);
 
-  const cross = () => {
-    if (outcome !== null) return;
-    if (light !== "green") {
-      setOutcome({ safe: false, msg: "🛑 Oops! Always wait for the green light." });
-    } else if (!left || !right) {
-      setOutcome({ safe: false, msg: "👀 Oops! Look left and right before you cross." });
-    } else {
-      setScore((s) => s + 1);
-      setOutcome({ safe: true, msg: "✅ Safe crossing! You waited and looked both ways." });
-    }
-    playFeedback(light === "green" && left && right ? "success" : "error");
-  };
-
-  const next = () => {
+  const next = (wasWrong = false) => {
+    const nextMistakes = mistakes + (wasWrong ? 1 : 0);
+    setMistakes(nextMistakes);
     if (round + 1 >= ROUNDS) {
       setFinished(true);
-      if (score >= PASS_SCORE) onPassed();
+      if (nextMistakes === 0) onPassed();
       return;
     }
     setRound(round + 1);
@@ -377,13 +403,31 @@ export function SafeCrossingGame({ level, onExit, onPassed }: GameProps) {
     setOutcome(null);
   };
 
+  const cross = () => {
+    if (outcome !== null) return;
+    const safe = light === "green" && left && right;
+    if (light !== "green") {
+      setOutcome({ safe: false, msg: "🛑 Oops! Always wait for the green light." });
+    } else if (!left || !right) {
+      setOutcome({ safe: false, msg: "👀 Oops! Look left and right before you cross." });
+    } else {
+      setScore((s) => s + 1);
+      setOutcome({ safe: true, msg: "✅ Safe crossing! You waited and looked both ways." });
+    }
+    playFeedback(safe ? "success" : "error");
+    if (!safe) {
+      onMistake();
+      advanceTimer.current = setTimeout(() => next(true), 900);
+    }
+  };
+
   if (finished) {
-    const passed = score >= PASS_SCORE;
+    const passed = mistakes === 0;
     return (
       <ResultView
         passed={passed}
         title={passed ? "Safety star!" : "Try again!"}
-        sub={`You crossed safely ${score} of ${ROUNDS} times.${passed ? " You earned a star!" : " Cross safely 2 times to earn a star."}`}
+        sub={`You crossed safely ${score} of ${ROUNDS} times, with ${mistakes} ${mistakes === 1 ? "mistake" : "mistakes"}.${passed ? " You earned a star!" : " Try the whole lesson again for a perfect score."}`}
         onExit={onExit}
       />
     );
@@ -431,14 +475,20 @@ export function SafeCrossingGame({ level, onExit, onPassed }: GameProps) {
         </Pressable>
       ) : (
         <>
-          <Text style={[styles.feedback, outcome.safe ? styles.good : styles.bad]}>
+          <Text style={[
+            styles.feedback,
+            outcome.safe ? styles.good : styles.bad,
+            darkMode && (outcome.safe ? styles.darkGood : styles.darkBad),
+          ]}>
             {outcome.msg}
           </Text>
-          <Pressable onPress={next} style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnText}>
-              {round + 1 >= ROUNDS ? "SEE RESULTS" : "NEXT"}
-            </Text>
-          </Pressable>
+          {outcome.safe ? (
+            <Pressable onPress={() => next()} style={styles.primaryBtn}>
+              <Text style={styles.primaryBtnText}>
+                {round + 1 >= ROUNDS ? "SEE RESULTS" : "NEXT"}
+              </Text>
+            </Pressable>
+          ) : null}
         </>
       )}
     </Frame>
@@ -596,7 +646,7 @@ const TRAY_SIZE: Record<Shape, { w: number; h: number }> = {
   circle: { w: 46, h: 46 },
 };
 
-export function HouseBuilderGame({ level, onExit, onPassed }: GameProps) {
+export function HouseBuilderGame({ level, onExit, onPassed, onMistake }: GameProps) {
   const slotDefs = HOUSE_SLOTS.filter((s) => HOUSE_KEYS_BY_LEVEL[level - 1].includes(s.key));
   const pieces = useMemo(
     () => shuffle(slotDefs.map((s) => ({ id: s.key, shape: s.shape, color: s.color }))),
@@ -609,6 +659,7 @@ export function HouseBuilderGame({ level, onExit, onPassed }: GameProps) {
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState("Drag each shape into its spot!");
   const [finished, setFinished] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const drop = async (piece: { id: string; shape: Shape }, px: number, py: number) => {
     const hitKeys = await slots.hits(px, py);
@@ -616,7 +667,10 @@ export function HouseBuilderGame({ level, onExit, onPassed }: GameProps) {
       (s) => hitKeys.includes(s.key) && s.shape === piece.shape && !filled[s.key]
     );
     if (!target) {
-      setMessage(`Try another spot for the ${piece.shape}.`);
+      setMessage("That answer ends this try. Restart the lesson to try again.");
+      setFailed(true);
+      setFinished(true);
+      onMistake();
       playFeedback("error");
       return false;
     }
@@ -635,9 +689,9 @@ export function HouseBuilderGame({ level, onExit, onPassed }: GameProps) {
   if (finished) {
     return (
       <ResultView
-        passed
-        title="You built a house!"
-        sub="Great shape matching. You earned a star!"
+        passed={!failed}
+        title={failed ? "Try the lesson again!" : "You built a house!"}
+        sub={failed ? "A shape went in the wrong spot. Start this lesson over for a perfect score." : "Great shape matching. You earned a star!"}
         onExit={onExit}
       />
     );
@@ -727,7 +781,7 @@ const ROUTINES: { title: string; steps: Step[] }[] = [
   },
 ];
 
-export function HealthyRoutineGame({ level, onExit, onPassed }: GameProps) {
+export function HealthyRoutineGame({ level, onExit, onPassed, onMistake }: GameProps) {
   const routine = ROUTINES[level - 1];
   const pieces = useMemo(
     () => shuffle(routine.steps.map((step, order) => ({ ...step, order }))),
@@ -739,6 +793,7 @@ export function HealthyRoutineGame({ level, onExit, onPassed }: GameProps) {
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState("Drag the steps into the right order!");
   const [finished, setFinished] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const drop = async (piece: Step & { order: number }, px: number, py: number) => {
     const hitKeys = await slots.hits(px, py);
@@ -748,7 +803,10 @@ export function HealthyRoutineGame({ level, onExit, onPassed }: GameProps) {
       return false;
     }
     if (slotIndex !== piece.order) {
-      setMessage("Not yet. Think about what comes first.");
+      setMessage("That answer ends this try. Restart the lesson to try again.");
+      setFailed(true);
+      setFinished(true);
+      onMistake();
       playFeedback("error");
       return false;
     }
@@ -767,9 +825,9 @@ export function HealthyRoutineGame({ level, onExit, onPassed }: GameProps) {
   if (finished) {
     return (
       <ResultView
-        passed
-        title="Healthy habit!"
-        sub={`You put "${routine.title}" in the right order. You earned a star!`}
+        passed={!failed}
+        title={failed ? "Try the lesson again!" : "Healthy habit!"}
+        sub={failed ? "A step was out of order. Start this lesson over for a perfect score." : `You put "${routine.title}" in the right order. You earned a star!`}
         onExit={onExit}
       />
     );
@@ -832,6 +890,8 @@ export const styles = StyleSheet.create({
   hero: { alignItems: "center", backgroundColor: "#DDF5F1", borderRadius: 20, padding: 16, marginBottom: 14 },
   bigEmoji: { fontSize: 54, marginVertical: 4 },
   title: { color: "#173B53", fontSize: 24, fontWeight: "900", textAlign: "center" },
+  darkText: { color: "#E4EAF3" },
+  darkMutedText: { color: "#B9C5D8" },
   scene: { color: "#173B53", fontSize: 18, fontWeight: "800", lineHeight: 25, textAlign: "center", marginTop: 4 },
   sub: { color: "#36566A", fontSize: 15, lineHeight: 22, textAlign: "center", marginTop: 4 },
   meta: { color: "#4B6A7A", fontSize: 13, fontWeight: "800" },
@@ -845,6 +905,8 @@ export const styles = StyleSheet.create({
   feedback: { fontSize: 17, fontWeight: "900", textAlign: "center", marginVertical: 8 },
   good: { color: "#28543A" },
   bad: { color: "#9C3E32" },
+  darkGood: { color: "#A7E2BC" },
+  darkBad: { color: "#FFC0B5" },
   lightRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
   lightDot: { width: 34, height: 34, borderRadius: 17 },
   lightText: { color: "#173B53", fontSize: 16, fontWeight: "900" },

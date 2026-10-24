@@ -345,11 +345,13 @@ export function KinderLessonsScreen(props: GradeScreenProps) {
     />
   );
 }
-import { useContext, useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { awardModuleBadge } from "../data/badges";
 import type { CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import AnimatedLearningSticker from "./AnimatedLearningSticker";
 import LessonInstructionModal from "./LessonInstructionModal";
 import {
   HealthyRoutineGame,
@@ -494,6 +496,7 @@ type Props = {
   completedLessonIds: string[];
   lessonProgressReady: boolean;
   onCompleteLesson: (lessonId: string) => void;
+  onRecordMistake: (lessonId: string) => void;
 };
 
 type View_ =
@@ -509,6 +512,7 @@ export default function KindergartenLessonsScreen({
   completedLessonIds,
   lessonProgressReady,
   onCompleteLesson,
+  onRecordMistake,
 }: Props) {
   const { darkMode } = useContext(AppAppearanceContext);
   const [view, setView] = useState<View_>({ kind: "units" });
@@ -534,6 +538,34 @@ export default function KindergartenLessonsScreen({
       0
     );
 
+  const isUnitComplete = (unit: Unit) =>
+    unitStars(unit) === unit.games.length * LEVELS.length;
+
+  const completeLevel = (unit: Unit, game: Game, level: number) => {
+    const completedId = levelId(unit.id, game.id, level);
+    onCompleteLesson(completedId);
+    const unitComplete = unit.games.every((unitGame) =>
+      LEVELS.every(
+        (unitLevel) =>
+          (unitGame.id === game.id && unitLevel === level) ||
+          isDone(unit.id, unitGame.id, unitLevel)
+      )
+    );
+    if (!unitComplete) return;
+
+    void awardModuleBadge({
+      moduleId: `kindergarten:${unit.id}`,
+      title: `Unit ${unit.number}: ${unit.title}`,
+      summary: unit.focus,
+      resultLabel: "Completed every level with a perfect score",
+    }).catch((error: unknown) => {
+      Alert.alert(
+        "Badge not saved",
+        error instanceof Error ? error.message : "Check device storage and try again."
+      );
+    });
+  };
+
   // ----- Game view -----
   if (view.kind === "game" && activeUnit) {
     const game = activeUnit.games.find((g) => g.id === view.gameId);
@@ -544,7 +576,8 @@ export default function KindergartenLessonsScreen({
           <MarketCountGame
             level={view.level}
             onExit={exit}
-            onPassed={() => onCompleteLesson(levelId(activeUnit.id, game.id, view.level))}
+            onPassed={() => completeLevel(activeUnit, game, view.level)}
+            onMistake={() => onRecordMistake(levelId(activeUnit.id, game.id, view.level))}
           />
         );
       }
@@ -553,14 +586,16 @@ export default function KindergartenLessonsScreen({
           <SoundSafariGame
             level={view.level}
             onExit={exit}
-            onPassed={() => onCompleteLesson(levelId(activeUnit.id, game.id, view.level))}
+            onPassed={() => completeLevel(activeUnit, game, view.level)}
+            onMistake={() => onRecordMistake(levelId(activeUnit.id, game.id, view.level))}
           />
         );
       }
       const common = {
         level: view.level,
         onExit: exit,
-        onPassed: () => onCompleteLesson(levelId(activeUnit.id, game.id, view.level)),
+        onPassed: () => completeLevel(activeUnit, game, view.level),
+        onMistake: () => onRecordMistake(levelId(activeUnit.id, game.id, view.level)),
       };
       if (game.id === "who-can-help") return <WhoCanHelpGame {...common} />;
       if (game.id === "polite-kids") return <PoliteKidsGame {...common} />;
@@ -670,26 +705,35 @@ export default function KindergartenLessonsScreen({
           <Text style={styles.backBtnText}>Back</Text>
         </Pressable>
         <View style={[styles.hero, darkMode && styles.darkCard]}>
-          <Text style={styles.bigEmoji}>🌈</Text>
+          <AnimatedLearningSticker variant="owl" size={78} />
           <Text style={[styles.heroTitle, darkMode && styles.darkText]}>Choose an adventure</Text>
           <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>Pick a unit to start playing!</Text>
         </View>
-        {kindergartenUnits.map((unit) => (
-          <Pressable
-            key={unit.id}
-            onPress={() => setView({ kind: "unit", unitId: unit.id })}
-            style={[styles.card, darkMode && styles.darkCard]}
-          >
-            <Text style={styles.cardEmoji}>{unit.emoji}</Text>
-            <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
-              Unit {unit.number}: {unit.title}
-            </Text>
-            <Text style={[styles.meta, darkMode && styles.darkMutedText]}>
-              {unit.games.length} {unit.games.length === 1 ? "game" : "games"} · ⭐{" "}
-              {unitStars(unit)}/{unit.games.length * LEVELS.length} →
-            </Text>
-          </Pressable>
-        ))}
+        {kindergartenUnits.map((unit, index) => {
+          const unlocked =
+            lessonProgressReady &&
+            (index === 0 || isUnitComplete(kindergartenUnits[index - 1]));
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !unlocked }}
+              disabled={!unlocked}
+              key={unit.id}
+              onPress={() => setView({ kind: "unit", unitId: unit.id })}
+              style={[styles.card, darkMode && styles.darkCard, !unlocked && { opacity: 0.6 }]}
+            >
+              <Text style={styles.cardEmoji}>{unit.emoji}</Text>
+              <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
+                Unit {unit.number}: {unit.title}
+              </Text>
+              <Text style={[styles.meta, darkMode && styles.darkMutedText]}>
+                {unit.games.length} {unit.games.length === 1 ? "game" : "games"} · ⭐{" "}
+                {unitStars(unit)}/{unit.games.length * LEVELS.length} ·{" "}
+                {unlocked ? "Open →" : "🔒 Locked"}
+              </Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
     </SafeAreaView>
   );
@@ -698,7 +742,6 @@ export default function KindergartenLessonsScreen({
 // ---------- Palengke Count (playable) ----------
 
 const ROUNDS = 3;
-const PASS_SCORE = 2; // "most answers right"
 const MAX_BY_LEVEL = [5, 8, 10];
 const PRODUCE = [
   { emoji: "🥭", name: "mangoes" },
@@ -710,10 +753,12 @@ function MarketCountGame({
   level,
   onExit,
   onPassed,
+  onMistake,
 }: {
   level: number;
   onExit: () => void;
   onPassed: () => void;
+  onMistake: () => void;
 }) {
   const { darkMode } = useContext(AppAppearanceContext);
   const max = MAX_BY_LEVEL[level - 1] ?? 5;
@@ -724,24 +769,27 @@ function MarketCountGame({
   const [round, setRound] = useState(0);
   const [count, setCount] = useState(0);
   const [score, setScore] = useState(0);
+  const [mistakes, setMistakes] = useState(0);
   const [checked, setChecked] = useState<null | boolean>(null);
   const [finished, setFinished] = useState(false);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const item = PRODUCE[round % PRODUCE.length];
   const target = targets[round];
 
-  const check = () => {
-    const correct = count === target;
-    setChecked(correct);
-    playFeedback(correct ? "success" : "error");
-    if (correct) setScore((s) => s + 1);
-  };
+  useEffect(
+    () => () => {
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    },
+    []
+  );
 
-  const next = () => {
+  const next = (wasWrong = false) => {
+    const nextMistakes = mistakes + (wasWrong ? 1 : 0);
+    setMistakes(nextMistakes);
     if (round + 1 >= ROUNDS) {
       setFinished(true);
-      // score state is already updated by now because check() ran earlier
-      if (score >= PASS_SCORE) onPassed();
+      if (nextMistakes === 0) onPassed();
       return;
     }
     setRound(round + 1);
@@ -749,16 +797,27 @@ function MarketCountGame({
     setChecked(null);
   };
 
+  const check = () => {
+    const correct = count === target;
+    setChecked(correct);
+    playFeedback(correct ? "success" : "error");
+    if (correct) setScore((s) => s + 1);
+    else {
+      onMistake();
+      advanceTimer.current = setTimeout(() => next(true), 900);
+    }
+  };
+
   if (finished) {
-    const passed = score >= PASS_SCORE;
+    const passed = mistakes === 0;
     return (
       <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
         <View style={styles.centerPanel}>
           <Text style={styles.bigEmoji}>{passed ? "🌟" : "💪"}</Text>
           <Text style={[styles.heroTitle, darkMode && styles.darkText]}>{passed ? "Great job!" : "Try again!"}</Text>
           <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>
-            You got {score} of {ROUNDS} right.
-            {passed ? " You earned a star!" : " Get 2 right to earn a star."}
+            You got {score} of {ROUNDS} right, with {mistakes} {mistakes === 1 ? "mistake" : "mistakes"}.
+            {passed ? " You earned a star!" : " Try the whole lesson again for a perfect score."}
           </Text>
           <Pressable onPress={onExit} style={styles.primaryBtn}>
             <Text style={styles.primaryBtnText}>BACK TO GAMES</Text>
@@ -823,11 +882,13 @@ function MarketCountGame({
             <Text style={[styles.feedback, checked ? styles.good : styles.bad]}>
               {checked ? "🦉 Correct! Great counting!" : `🦉 Almost! The answer was ${target}.`}
             </Text>
-            <Pressable onPress={next} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>
-                {round + 1 >= ROUNDS ? "SEE RESULTS" : "NEXT"}
-              </Text>
-            </Pressable>
+            {checked ? (
+              <Pressable onPress={() => next()} style={styles.primaryBtn}>
+                <Text style={styles.primaryBtnText}>
+                  {round + 1 >= ROUNDS ? "SEE RESULTS" : "NEXT"}
+                </Text>
+              </Pressable>
+            ) : null}
           </>
         )}
       </ScrollView>

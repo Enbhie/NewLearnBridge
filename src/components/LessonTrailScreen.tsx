@@ -1,6 +1,8 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Animated, Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { awardModuleBadge } from "../data/badges";
+import AnimatedLearningSticker from "./AnimatedLearningSticker";
 import type { CategoryId } from "../data/learningContent";
 import type { Difficulty as LessonDifficulty } from "./AccountSettingsScreen";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
@@ -65,18 +67,38 @@ function shuffle<T>(list: T[]): T[] {
 
 const NEXT_ROUND_DELAY_MS = 900;
 
+function FloatingEmoji({ emoji, style }: { emoji: string; style?: object }) {
+  const offset = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(offset, { toValue: -6, duration: 700, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 6, duration: 700, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 0, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [offset]);
+
+  return <Animated.Text style={[style, { transform: [{ translateY: offset }] }]}>{emoji}</Animated.Text>;
+}
+
 // ---------- Minigame: choose the right answer ----------
 
 function ChoicePlayer({
   game,
   difficulty,
   darkMode,
+  onMistake,
   onFinish,
 }: {
   game: ChoiceGame;
   difficulty: LessonDifficulty;
   darkMode: boolean;
-  onFinish: (passed: boolean, correct: number, total: number) => void;
+  onMistake: () => void;
+  onFinish: (passed: boolean, correct: number, total: number, mistakes: number) => void;
 }) {
   const roundCount = Math.min(
     game.rounds.length,
@@ -101,6 +123,7 @@ function ChoicePlayer({
   );
   const [index, setIndex] = useState(0);
   const [correct, setCorrect] = useState(0);
+  const [mistakes, setMistakes] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -112,23 +135,21 @@ function ChoicePlayer({
   );
 
   const round = rounds[index];
-  const needed =
-    difficulty === "easy"
-      ? Math.max(1, Math.ceil(rounds.length / 2))
-      : difficulty === "standard"
-        ? Math.max(1, rounds.length - 1)
-        : rounds.length;
-
   const choose = (option: string) => {
     if (picked !== null) return;
     const isRight = option === round.correct;
     playFeedback(isRight ? "success" : "error");
     const nextCorrect = correct + (isRight ? 1 : 0);
+    const nextMistakes = mistakes + (isRight ? 0 : 1);
     setPicked(option);
     setCorrect(nextCorrect);
+    if (!isRight) {
+      setMistakes(nextMistakes);
+      onMistake();
+    }
     timer.current = setTimeout(() => {
       if (index + 1 >= rounds.length) {
-        onFinish(nextCorrect >= needed, nextCorrect, rounds.length);
+        onFinish(nextMistakes === 0, nextCorrect, rounds.length, nextMistakes);
       } else {
         setIndex(index + 1);
         setPicked(null);
@@ -155,7 +176,7 @@ function ChoicePlayer({
         </View>
       ) : null}
       <View style={[styles.playCard, darkMode && styles.darkCard]}>
-        {round.art ? <Text style={styles.art}>{round.art}</Text> : null}
+        {round.art ? <FloatingEmoji emoji={round.art} style={styles.art} /> : null}
         <Text style={[styles.question, darkMode && styles.darkText]}>{round.q}</Text>
       </View>
       {round.options.map((option) => {
@@ -172,6 +193,8 @@ function ChoicePlayer({
               darkMode && styles.darkOption,
               isAnswer && styles.optionRight,
               isPicked && !isAnswer && styles.optionWrong,
+              darkMode && isAnswer && styles.darkOptionRight,
+              darkMode && isPicked && !isAnswer && styles.darkOptionWrong,
             ]}
           >
             <Text style={[styles.optionText, darkMode && styles.darkMutedText]}>{option}</Text>
@@ -179,7 +202,11 @@ function ChoicePlayer({
         );
       })}
       {picked !== null ? (
-        <Text style={[styles.feedback, picked === round.correct ? styles.good : styles.bad]}>
+        <Text style={[
+          styles.feedback,
+          picked === round.correct ? styles.good : styles.bad,
+          darkMode && (picked === round.correct ? styles.darkGood : styles.darkBad),
+        ]}>
           {picked === round.correct ? "Great job!" : `Nice try! The answer is ${round.correct}.`}
         </Text>
       ) : null}
@@ -193,12 +220,14 @@ function OrderPlayer({
   game,
   difficulty,
   darkMode,
+  onMistake,
   onFinish,
 }: {
   game: OrderGame;
   difficulty: LessonDifficulty;
   darkMode: boolean;
-  onFinish: (passed: boolean, correct: number, total: number) => void;
+  onMistake: () => void;
+  onFinish: (passed: boolean, correct: number, total: number, mistakes: number) => void;
 }) {
   const roundCount = Math.min(
     game.rounds.length,
@@ -233,8 +262,21 @@ function OrderPlayer({
     if (locked || picked.includes(order)) return;
     if (order !== picked.length) {
       playFeedback("error");
-      setMistakes(mistakes + 1);
-      setMessage("Not yet. Try a different one!");
+      const nextMistakes = mistakes + 1;
+      setMistakes(nextMistakes);
+      setLocked(true);
+      setMessage("Moving to the next puzzle.");
+      onMistake();
+      timer.current = setTimeout(() => {
+        if (index + 1 >= rounds.length) {
+          onFinish(false, index, rounds.length, nextMistakes);
+        } else {
+          setIndex(index + 1);
+          setPicked([]);
+          setMessage("");
+          setLocked(false);
+        }
+      }, NEXT_ROUND_DELAY_MS);
       return;
     }
     const nextPicked = [...picked, order];
@@ -246,11 +288,7 @@ function OrderPlayer({
       setMessage("You got it!");
       timer.current = setTimeout(() => {
         if (index + 1 >= rounds.length) {
-          onFinish(
-            mistakes <= (difficulty === "easy" ? 5 : difficulty === "standard" ? 3 : 1),
-            rounds.length,
-            rounds.length
-          );
+          onFinish(mistakes === 0, rounds.length, rounds.length, mistakes);
         } else {
           setIndex(index + 1);
           setPicked([]);
@@ -275,7 +313,7 @@ function OrderPlayer({
         />
       </View>
       <View style={[styles.playCard, darkMode && styles.darkCard]}>
-        {round.art ? <Text style={styles.art}>{round.art}</Text> : null}
+        {round.art ? <FloatingEmoji emoji={round.art} style={styles.art} /> : null}
         <Text style={[styles.question, darkMode && styles.darkText]}>{round.prompt}</Text>
         <View style={styles.answerRow}>
           {round.items.map((label, slot) => (
@@ -302,7 +340,11 @@ function OrderPlayer({
         })}
       </View>
       {message ? (
-        <Text style={[styles.feedback, message === "You got it!" ? styles.good : styles.bad]}>
+        <Text style={[
+          styles.feedback,
+          message === "You got it!" ? styles.good : styles.bad,
+          darkMode && (message === "You got it!" ? styles.darkGood : styles.darkBad),
+        ]}>
           {message}
         </Text>
       ) : null}
@@ -322,6 +364,7 @@ function LessonPlayer({
   canPlay,
   lessonProgressReady,
   darkMode,
+  onMistake,
   onExit,
   onPassed,
 }: {
@@ -333,13 +376,19 @@ function LessonPlayer({
   canPlay: boolean;
   lessonProgressReady: boolean;
   darkMode: boolean;
+  onMistake: () => void;
   onExit: () => void;
   onPassed: () => void;
 }) {
   const [phase, setPhase] = useState<"intro" | "play" | "result">("intro");
   const [showGameInstructions, setShowGameInstructions] = useState(canPlay);
   const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState({ passed: false, correct: 0, total: 0 });
+  const [result, setResult] = useState({
+    passed: false,
+    correct: 0,
+    total: 0,
+    mistakes: 0,
+  });
   const gameInstructions =
     lesson.game.type === "choice"
       ? [
@@ -353,10 +402,28 @@ function LessonPlayer({
           "If you tap the wrong tile, try another one!",
         ];
 
-  const finish = (passed: boolean, correct: number, total: number) => {
-    setResult({ passed, correct, total });
+  const finish = (
+    passed: boolean,
+    correct: number,
+    total: number,
+    mistakes: number
+  ) => {
+    setResult({ passed, correct, total, mistakes });
     setPhase("result");
-    if (passed) onPassed();
+    if (passed) {
+      void awardModuleBadge({
+        moduleId: `${gradeLabel}:${subject.id}:${lesson.id}`,
+        title: lesson.title,
+        summary: lesson.learn,
+        resultLabel: `${correct}/${total} correct`,
+      }).catch((error: unknown) => {
+        Alert.alert(
+          "Badge not saved",
+          error instanceof Error ? error.message : "Check device storage and try again."
+        );
+      });
+      onPassed();
+    }
   };
 
   return (
@@ -370,7 +437,10 @@ function LessonPlayer({
         {phase === "intro" ? (
           <View>
             <View style={[styles.hero, darkMode && styles.darkCard]}>
-              <Text style={styles.bigEmoji}>{lesson.emoji}</Text>
+              <AnimatedLearningSticker
+                variant={subject.id === "math" ? "coin" : subject.id === "science" ? "plant" : "owl"}
+                size={88}
+              />
               <Text style={[styles.label, darkMode && styles.darkMutedText]}>{gradeLabel} · {subject.title}</Text>
               <Text style={[styles.lessonNumber, darkMode && styles.darkMutedText]}>Lesson {lessonNumber} of {subject.lessons.length}</Text>
               <Text style={[styles.heroTitle, darkMode && styles.darkText]}>{lesson.title}</Text>
@@ -423,6 +493,7 @@ function LessonPlayer({
                 game={lesson.game}
                 difficulty={difficulty}
                 darkMode={darkMode}
+                onMistake={onMistake}
                 onFinish={finish}
               />
             ) : (
@@ -431,6 +502,7 @@ function LessonPlayer({
                 game={lesson.game}
                 difficulty={difficulty}
                 darkMode={darkMode}
+                onMistake={onMistake}
                 onFinish={finish}
               />
             )}
@@ -450,8 +522,8 @@ function LessonPlayer({
                     ? `You got ${result.correct} out of ${result.total} right. Lesson complete!`
                     : "You put everything in order. Lesson complete!"
                   : lesson.game.type === "choice"
-                    ? `You got ${result.correct} out of ${result.total}. Try again and aim for more correct answers.`
-                    : "Try again and watch the order of the steps."}
+                    ? `You got ${result.correct} out of ${result.total} right, with ${result.mistakes} ${result.mistakes === 1 ? "mistake" : "mistakes"}. Try again for a perfect score.`
+                    : `You made ${result.mistakes} ${result.mistakes === 1 ? "mistake" : "mistakes"}. Try again for a perfect score.`}
               </Text>
             </View>
             <Pressable
@@ -540,6 +612,7 @@ export type GradeScreenProps = {
   completedLessonIds: string[];
   lessonProgressReady: boolean;
   onCompleteLesson: (lessonId: string) => void;
+  onRecordMistake: (lessonId: string) => void;
 };
 
 type TrailConfig = {
@@ -563,6 +636,7 @@ export default function LessonTrailScreen({
   completedLessonIds,
   lessonProgressReady,
   onCompleteLesson,
+  onRecordMistake,
 }: GradeScreenProps & TrailConfig) {
   const { darkMode } = useContext(AppAppearanceContext);
   const [view, setView] = useState<ViewState>({ kind: "subjects" });
@@ -606,6 +680,9 @@ export default function LessonTrailScreen({
           canPlay={canPlay}
           lessonProgressReady={lessonProgressReady}
           darkMode={darkMode}
+          onMistake={() =>
+            onRecordMistake(lessonKey(activeSubject.id, lesson.id))
+          }
           onExit={() => setView({ kind: "lessons", subjectId: activeSubject.id })}
           onPassed={() => onCompleteLesson(lessonKey(activeSubject.id, lesson.id))}
         />
@@ -987,10 +1064,14 @@ const styles = StyleSheet.create({
   mistakeText: { color: "#4B6A7A", fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 4 },
   good: { color: "#28543A" },
   bad: { color: "#9C3E32" },
+  darkGood: { color: "#A7E2BC" },
+  darkBad: { color: "#FFC0B5" },
   darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
   darkText: { color: "#E4EAF3" },
   darkMutedText: { color: "#B9C5D8" },
   darkOption: { backgroundColor: "#29364D", borderColor: "#54647D" },
+  darkOptionRight: { backgroundColor: "#22503B", borderColor: "#61B891" },
+  darkOptionWrong: { backgroundColor: "#5B2A32", borderColor: "#D7776A" },
   darkLockedLessonCard: { backgroundColor: "#26334A", borderColor: "#3C4B63" },
   darkTrack: { backgroundColor: "#46546A" },
   modalOverlay: {

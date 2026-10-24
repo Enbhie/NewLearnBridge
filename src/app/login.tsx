@@ -26,18 +26,28 @@ export default function LoginScreen() {
           
           {/* Header Section */}
           <View className="mb-8">
-            <Text className="text-3xl font-bold text-gray-900">Welcome Back</Text>
-            <Text className="text-base text-gray-500 mt-2">Sign in to continue to LearnBridge</Text>
+            <Text className={`text-3xl font-bold ${darkMode ? "text-gray-100" : "text-gray-900"}`}>
+              Welcome Back
+            </Text>
+            <Text className={`text-base mt-2 ${darkMode ? "text-gray-300" : "text-gray-500"}`}>
+              Sign in to continue to LearnBridge
+            </Text>
           </View>
 
           {/* Form Inputs */}
           <View className="space-y-4">
             <View>
-              <Text className="text-sm font-medium text-gray-700 mb-1.5">Email</Text>
+              <Text className={`text-sm font-medium mb-1.5 ${darkMode ? "text-gray-200" : "text-gray-700"}`}>
+                Email
+              </Text>
               <TextInput
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 focus:border-blue-500 focus:bg-white"
+                className={`w-full px-4 py-3 border rounded-xl ${
+                  darkMode
+                    ? "bg-slate-800 border-slate-600 text-gray-100 focus:border-blue-400"
+                    : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500 focus:bg-white"
+                }`}
                 placeholder="Enter your email"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={darkMode ? "#CBD5E1" : "#6B7280"}
                 value={email ?? ""}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -46,11 +56,17 @@ export default function LoginScreen() {
             </View>
 
             <View>
-              <Text className="text-sm font-medium text-gray-700 mb-1.5">Password</Text>
+              <Text className={`text-sm font-medium mb-1.5 ${darkMode ? "text-gray-200" : "text-gray-700"}`}>
+                Password
+              </Text>
               <TextInput
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 focus:border-blue-500 focus:bg-white"
+                className={`w-full px-4 py-3 border rounded-xl ${
+                  darkMode
+                    ? "bg-slate-800 border-slate-600 text-gray-100 focus:border-blue-400"
+                    : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500 focus:bg-white"
+                }`}
                 placeholder="Enter your password"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={darkMode ? "#CBD5E1" : "#6B7280"}
                 value={password ?? ""}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -59,7 +75,9 @@ export default function LoginScreen() {
 
             {/* Forgot Password */}
             <TouchableOpacity className="items-end py-1">
-              <Text className="text-sm font-semibold text-blue-600">Forgot Password?</Text>
+              <Text className={`text-sm font-semibold ${darkMode ? "text-blue-300" : "text-blue-600"}`}>
+                Forgot Password?
+              </Text>
             </TouchableOpacity>
 
             {/* Login Button */}
@@ -73,9 +91,13 @@ export default function LoginScreen() {
 
           {/* Footer / Sign Up Link */}
           <View className="flex-row justify-center mt-8">
-            <Text className="text-gray-500">Don't have an account? </Text>
+            <Text className={darkMode ? "text-gray-300" : "text-gray-500"}>
+              Don't have an account?{" "}
+            </Text>
             <TouchableOpacity>
-              <Text className="font-semibold text-blue-600">Sign Up</Text>
+              <Text className={`font-semibold ${darkMode ? "text-blue-300" : "text-blue-600"}`}>
+                Sign Up
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -89,7 +111,7 @@ const styles = {
     alignSelf: "center" as const,
     width: "100%" as const,
     maxWidth: 560,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#111827",
     borderRadius: 24,
     marginVertical: 20,
   },

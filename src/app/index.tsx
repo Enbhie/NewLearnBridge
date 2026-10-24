@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isRunningInExpoGo } from "expo";
-import * as Network from "expo-network";
 import * as ImagePicker from "expo-image-picker";
+import * as Network from "expo-network";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
     EmailAuthProvider,
@@ -19,11 +19,10 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import GradeOneLessonsScreen, { gradeOneLessonCount } from "../components/GradeOneLessonsScreen";
 import {
-    Animated,
     ActivityIndicator,
     Alert,
+    Animated,
     AppState,
     Image,
     KeyboardAvoidingView,
@@ -41,56 +40,58 @@ import AccountSettingsScreen, {
     type AccountPreferences,
     type LearnerProfile,
 } from "../components/AccountSettingsScreen";
+import AnimatedLearningSticker from "../components/AnimatedLearningSticker";
+import { AnimatedPressable as Pressable } from "../components/AnimatedPressable";
+import CharacterSelectScreen from "../components/CharacterSelectScreen";
 import {
     AppAppearanceContext,
     CloudBackdropVisibilityContext,
 } from "../components/CloudBackdrop";
-import { AnimatedPressable as Pressable } from "../components/AnimatedPressable";
-import CharacterSelectScreen from "../components/CharacterSelectScreen";
-import InternetRequiredModal, {
-  useInternetRequirement,
-} from "../components/InternetRequiredModal";
-import LessonCompleteScreen from "../components/LessonCompleteScreen";
-import KindergartenLessonsScreen, {
-  kindergartenLessonCount,
-} from "../components/KindergartenLessonsScreen";
-import GradeTwoLessonsScreen, {
-  gradeTwoLessonCount,
-} from "../components/GradeTwoLessonsScreen";
+import GradeOneLessonsScreen, { gradeOneLessonCount } from "../components/GradeOneLessonsScreen";
 import GradeThreeLessonsScreen from "../components/GradeThreeLessonsScreen";
+import GradeTwoLessonsScreen, {
+    gradeTwoLessonCount,
+} from "../components/GradeTwoLessonsScreen";
+import InternetRequiredModal, {
+    useInternetRequirement,
+} from "../components/InternetRequiredModal";
+import KindergartenLessonsScreen, {
+    kindergartenLessonCount,
+} from "../components/KindergartenLessonsScreen";
+import LessonCompleteScreen from "../components/LessonCompleteScreen";
 import LessonScreen from "../components/LessonScreen";
 import QuizScreen from "../components/QuizScreen";
 import ResultsScreen from "../components/ResultsScreen";
+import {
+    categoryMeta,
+    lessonContent,
+    type CategoryId,
+} from "../data/learningContent";
+import { getEarnedBadges, type EarnedBadge } from "../data/badges";
 import { getCompletedMissions, markMissionComplete } from "../data/missionProgress";
 import {
-  deleteMissionSubmissionsForUser,
-  getMissionSubmissions,
-  saveMissionPhotoSubmission,
-  syncMissionSubmissions,
-  type OfflineMissionSubmission,
-} from "../data/offlineMissionSubmissionQueue";
-import {
-  listenToMissionReview,
-  submitMissionPhotoForReview,
-  type MissionReview,
+    listenToMissionReview,
+    type MissionReview,
 } from "../data/missionSubmissions";
 import {
-  getMissionsForGrade,
-  gradeLabels,
-  type Grade,
-  type OfflineMission,
+    getMissionsForGrade,
+    gradeLabels,
+    type Grade,
+    type OfflineMission,
 } from "../data/offlineMissions";
 import {
-  categoryMeta,
-  lessonContent,
-  type CategoryId,
-} from "../data/learningContent";
+    deleteMissionSubmissionsForUser,
+    getMissionSubmissions,
+    saveMissionPhotoSubmission,
+    syncMissionSubmissions,
+    type OfflineMissionSubmission,
+} from "../data/offlineMissionSubmissionQueue";
 import { auth, firebaseConfigured, firestore } from "../firebase";
-import { checkInternetConnectivity, useInternetConnectivity } from "../utils/internetConnectivity";
 import {
-  setBackgroundMusic,
-  type BackgroundMusicTrack,
+    setBackgroundMusic,
+    type BackgroundMusicTrack,
 } from "../utils/backgroundMusic";
+import { checkInternetConnectivity, useInternetConnectivity } from "../utils/internetConnectivity";
 
 let notificationsModulePromise:
   | Promise<typeof import("expo-notifications") | null>
@@ -227,6 +228,7 @@ const PROFILE_PENDING_SYNC_SUFFIX = ".pending-sync";
 const SETTINGS_STORAGE_PREFIX = "learnbridge.settings.";
 const SCREEN_TIME_STORAGE_PREFIX = "learnbridge.screenTime.";
 const LESSON_PROGRESS_STORAGE_PREFIX = "learnbridge.lessonProgress.";
+const LESSON_MISTAKES_STORAGE_PREFIX = "learnbridge.lessonMistakes.";
 const EYE_BREAK_INTERVAL_SECONDS = 15 * 60;
 const EYE_BREAK_DURATION_SECONDS = 5 * 60;
 const LEGAL_POLICY_VERSION = "1.0";
@@ -326,6 +328,21 @@ function requireFirebaseAuth() {
 
 function getLessonProgressStorageKey(userId: string, profileId: string): string {
   return `${LESSON_PROGRESS_STORAGE_PREFIX}${userId}.${profileId}`;
+}
+
+function getLessonMistakesStorageKey(userId: string, profileId: string): string {
+  return `${LESSON_MISTAKES_STORAGE_PREFIX}${userId}.${profileId}`;
+}
+
+function isLessonMistakeCounts(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(
+      (count) => typeof count === "number" && Number.isInteger(count) && count >= 0
+    )
+  );
 }
 
 function isLearnerProfile(value: unknown): value is LearnerProfile {
@@ -708,7 +725,7 @@ function LoginScreen({
               <TextInput
                 style={[styles.textInput, emailError && styles.errorInput]}
                 placeholder="Enter email"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#6B7280"
                 value={email ?? ""}
                 onChangeText={(val) => {
                   setEmail(val);
@@ -726,7 +743,7 @@ function LoginScreen({
               <TextInput
                 style={[styles.textInput, passwordError && styles.errorInput]}
                 placeholder="Enter password"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#6B7280"
                 value={password ?? ""}
                 onChangeText={(val) => {
                   setPassword(val);
@@ -852,7 +869,7 @@ function ForgotPasswordScreen({
               <TextInput
                 style={[styles.textInput, emailError && styles.errorInput]}
                 placeholder="Enter your email"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#6B7280"
                 value={email ?? ""}
                 onChangeText={(value) => {
                   setEmail(value);
@@ -1102,7 +1119,7 @@ function SignUpScreen({
               <TextInput
                 style={[styles.textInput, fieldErrors.name && styles.errorInput]}
                 placeholder="e.g., Bea"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#6B7280"
                 value={childName ?? ""}
                 onChangeText={(val) => {
                   setChildName(val);
@@ -1121,7 +1138,7 @@ function SignUpScreen({
                     accessibilityLabel="Birthdate month"
                     style={[styles.textInput, styles.birthdateInput, fieldErrors.birthdate && styles.errorInput]}
                     placeholder="MM"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor="#6B7280"
                     value={birthdateMonth ?? ""}
                     onChangeText={(value) => updateBirthdatePart("month", value)}
                     keyboardType="number-pad"
@@ -1134,7 +1151,7 @@ function SignUpScreen({
                     accessibilityLabel="Birthdate day"
                     style={[styles.textInput, styles.birthdateInput, fieldErrors.birthdate && styles.errorInput]}
                     placeholder="DD"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor="#6B7280"
                     value={birthdateDay ?? ""}
                     onChangeText={(value) => updateBirthdatePart("day", value)}
                     keyboardType="number-pad"
@@ -1147,7 +1164,7 @@ function SignUpScreen({
                     accessibilityLabel="Birthdate year"
                     style={[styles.textInput, styles.birthdateInput, fieldErrors.birthdate && styles.errorInput]}
                     placeholder="YYYY"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor="#6B7280"
                     value={birthdateYear ?? ""}
                     onChangeText={(value) => updateBirthdatePart("year", value)}
                     keyboardType="number-pad"
@@ -1163,7 +1180,7 @@ function SignUpScreen({
               <TextInput
                 style={[styles.textInput, fieldErrors.email && styles.errorInput]}
                 placeholder="name@gmail.com"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#6B7280"
                 value={parentEmail ?? ""}
                 onChangeText={(val) => {
                   setParentEmail(val);
@@ -1180,7 +1197,7 @@ function SignUpScreen({
               <TextInput
                 style={[styles.textInput, fieldErrors.password && styles.errorInput]}
                 placeholder="Create a password"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#6B7280"
                 value={signUpPassword ?? ""}
                 onChangeText={(val) => {
                   setSignUpPassword(val);
@@ -1199,7 +1216,7 @@ function SignUpScreen({
               <TextInput
                 style={[styles.textInput, fieldErrors.confirmPassword && styles.errorInput]}
                 placeholder="Re-enter password"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#6B7280"
                 value={confirmPassword ?? ""}
                 onChangeText={(val) => {
                   setConfirmPassword(val);
@@ -1479,6 +1496,26 @@ function ProfileScreen({
   setScreen: (s: Screen) => void;
 }) {
   const { darkMode } = useContext(AppAppearanceContext);
+  const [earnedBadges, setEarnedBadges] = useState<EarnedBadge[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void getEarnedBadges()
+      .then((badges) => {
+        if (active) setEarnedBadges(badges);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        Alert.alert(
+          "Badges unavailable",
+          error instanceof Error ? error.message : "Check device storage and try again."
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <SafeAreaView style={styles.appPage}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -1513,6 +1550,7 @@ function ProfileScreen({
                 styles.profileStatusValue,
                 darkMode && styles.darkMutedText,
                 !firebaseUser?.emailVerified && styles.profileStatusPending,
+                darkMode && styles.darkProfileStatusPending,
               ]}
             >
               {firebaseUser?.emailVerified ? "Verified" : "Not verified"}
@@ -1525,6 +1563,31 @@ function ProfileScreen({
             </Text>
           </View>
         </View>
+
+        <View style={[styles.badgesCard, darkMode && styles.darkPanel]}>
+          <Text style={[styles.profileStatusTitle, darkMode && styles.darkText]}>🏆 Earned badges</Text>
+          {earnedBadges.length === 0 ? (
+            <Text style={[styles.emptyBadgesText, darkMode && styles.darkMutedText]}>
+              Finish a lesson to earn your first badge.
+            </Text>
+          ) : (
+            <View style={styles.badgesList}>
+              {earnedBadges.map((badge) => (
+                <View key={badge.id} style={[styles.badgeItem, darkMode && styles.darkCard]}>
+                  <AnimatedLearningSticker variant="coin" size={40} />
+                  <View style={styles.badgeTextWrap}>
+                    <Text style={[styles.badgeTitle, darkMode && styles.darkText]}>{badge.title}</Text>
+                    <Text style={[styles.badgeSummary, darkMode && styles.darkMutedText]}>{badge.summary}</Text>
+                    <Text style={[styles.badgeResult, darkMode && styles.darkBadgeResult]}>
+                      {badge.resultLabel}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
         <ActionButton onPress={onOpenSettings} variant="secondary">
           ACCOUNT SETTINGS
         </ActionButton>
@@ -2628,6 +2691,8 @@ export default function App() {
   const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
   const [lessonProgressReady, setLessonProgressReady] = useState(false);
   const completedLessonIdsRef = useRef<string[]>([]);
+  const [lessonMistakeCounts, setLessonMistakeCounts] = useState<Record<string, number>>({});
+  const lessonMistakeCountsRef = useRef<Record<string, number>>({});
   const [screenTimeUsedSeconds, setScreenTimeUsedSeconds] = useState(0);
   const [screenTimeReady, setScreenTimeReady] = useState(false);
   const [eyeBreakSecondsRemaining, setEyeBreakSecondsRemaining] = useState(0);
@@ -2880,7 +2945,9 @@ export default function App() {
   useEffect(() => {
     let isCurrent = true;
     completedLessonIdsRef.current = [];
+    lessonMistakeCountsRef.current = {};
     setCompletedLessonIds([]);
+    setLessonMistakeCounts({});
 
     const userId = firebaseUser?.uid;
     if (!userId) {
@@ -2897,16 +2964,29 @@ export default function App() {
     }
 
     const storageKey = getLessonProgressStorageKey(userId, activeProfileId);
+    const mistakesStorageKey = getLessonMistakesStorageKey(userId, activeProfileId);
     setLessonProgressReady(false);
-    void AsyncStorage.getItem(storageKey)
-      .then((storedProgress) => {
+    void Promise.all([
+      AsyncStorage.getItem(storageKey),
+      AsyncStorage.getItem(mistakesStorageKey),
+    ])
+      .then(([storedProgress, storedMistakes]) => {
         if (!isCurrent) return;
-        const parsed: unknown = storedProgress ? JSON.parse(storedProgress) : [];
-        if (!Array.isArray(parsed) || !parsed.every((id) => typeof id === "string")) {
+        const parsedProgress: unknown = storedProgress ? JSON.parse(storedProgress) : [];
+        if (
+          !Array.isArray(parsedProgress) ||
+          !parsedProgress.every((id) => typeof id === "string")
+        ) {
           throw new Error("Saved lesson progress is invalid.");
         }
-        completedLessonIdsRef.current = parsed;
-        setCompletedLessonIds(parsed);
+        const parsedMistakes: unknown = storedMistakes ? JSON.parse(storedMistakes) : {};
+        if (!isLessonMistakeCounts(parsedMistakes)) {
+          throw new Error("Saved lesson mistake counts are invalid.");
+        }
+        completedLessonIdsRef.current = parsedProgress;
+        lessonMistakeCountsRef.current = parsedMistakes;
+        setCompletedLessonIds(parsedProgress);
+        setLessonMistakeCounts(parsedMistakes);
         setLessonProgressReady(true);
       })
       .catch((error: unknown) => {
@@ -3200,6 +3280,32 @@ export default function App() {
     }
   };
 
+  const handleRecordLessonMistake = async (lessonId: string) => {
+    const currentUser = auth?.currentUser;
+    if (!currentUser || !activeProfileId || !lessonProgressReady) {
+      Alert.alert("Progress not ready", "Please wait for your learner profile to finish loading.");
+      return;
+    }
+
+    const nextCounts = {
+      ...lessonMistakeCountsRef.current,
+      [lessonId]: (lessonMistakeCountsRef.current[lessonId] ?? 0) + 1,
+    };
+    lessonMistakeCountsRef.current = nextCounts;
+    setLessonMistakeCounts(nextCounts);
+    try {
+      await AsyncStorage.setItem(
+        getLessonMistakesStorageKey(currentUser.uid, activeProfileId),
+        JSON.stringify(nextCounts)
+      );
+    } catch (error) {
+      Alert.alert(
+        "Mistake count not saved",
+        error instanceof Error ? error.message : "Check device storage and try again."
+      );
+    }
+  };
+
   const handlePreferencesChange = async (nextPreferences: AccountPreferences) => {
     const currentUser = auth?.currentUser;
     if (!currentUser) {
@@ -3263,9 +3369,14 @@ export default function App() {
     const currentUser = auth?.currentUser;
     if (currentUser && activeProfileId) {
       try {
-        await AsyncStorage.removeItem(
-          getLessonProgressStorageKey(currentUser.uid, activeProfileId)
-        );
+        await Promise.all([
+          AsyncStorage.removeItem(
+            getLessonProgressStorageKey(currentUser.uid, activeProfileId)
+          ),
+          AsyncStorage.removeItem(
+            getLessonMistakesStorageKey(currentUser.uid, activeProfileId)
+          ),
+        ]);
       } catch (error) {
         Alert.alert(
           "Progress not cleared",
@@ -3275,7 +3386,9 @@ export default function App() {
       }
     }
     completedLessonIdsRef.current = [];
+    lessonMistakeCountsRef.current = {};
     setCompletedLessonIds([]);
+    setLessonMistakeCounts({});
     setQuizResults({ correct: 0, total: 0, breakdown: [] });
     setScreen("profile");
   };
@@ -3463,7 +3576,9 @@ export default function App() {
     setPreferences(DEFAULT_PREFERENCES);
     setQuizResults({ correct: 0, total: 0, breakdown: [] });
     completedLessonIdsRef.current = [];
+    lessonMistakeCountsRef.current = {};
     setCompletedLessonIds([]);
+    setLessonMistakeCounts({});
     setScreen("home");
   };
 
@@ -3503,6 +3618,9 @@ export default function App() {
       ...childProfiles.map((profile) =>
         AsyncStorage.removeItem(getLessonProgressStorageKey(user.uid, profile.id))
       ),
+      ...childProfiles.map((profile) =>
+        AsyncStorage.removeItem(getLessonMistakesStorageKey(user.uid, profile.id))
+      ),
     ]).catch(() => undefined);
     setFirebaseUser(null);
     setEmail("");
@@ -3517,7 +3635,9 @@ export default function App() {
     setPreferences(DEFAULT_PREFERENCES);
     setQuizResults({ correct: 0, total: 0, breakdown: [] });
     completedLessonIdsRef.current = [];
+    lessonMistakeCountsRef.current = {};
     setCompletedLessonIds([]);
+    setLessonMistakeCounts({});
     setScreenTimeUsedSeconds(0);
     setEyeBreakSecondsRemaining(0);
     setScreen("home");
@@ -3823,6 +3943,7 @@ export default function App() {
         completedLessonIds={completedLessonIds}
         lessonProgressReady={lessonProgressReady}
         onCompleteLesson={(lessonId) => void handleCompleteLesson(lessonId)}
+        onRecordMistake={(lessonId) => void handleRecordLessonMistake(lessonId)}
       />
     );
   }
@@ -3839,6 +3960,7 @@ export default function App() {
         completedLessonIds={completedLessonIds}
         lessonProgressReady={lessonProgressReady}
         onCompleteLesson={(lessonId) => void handleCompleteLesson(lessonId)}
+        onRecordMistake={(lessonId) => void handleRecordLessonMistake(lessonId)}
       />
     );
   }
@@ -3854,11 +3976,20 @@ export default function App() {
         completedLessonIds={completedLessonIds}
         lessonProgressReady={lessonProgressReady}
         onCompleteLesson={(lessonId) => void handleCompleteLesson(lessonId)}
+        onRecordMistake={(lessonId) => void handleRecordLessonMistake(lessonId)}
       />
     );
   }
   if (screen === "grade3-lessons") {
-    return <GradeThreeLessonsScreen onBack={() => setScreen("menu")} />;
+    return (
+      <GradeThreeLessonsScreen
+        onBack={() => setScreen("menu")}
+        completedLessonIds={completedLessonIds}
+        lessonProgressReady={lessonProgressReady}
+        onCompleteLesson={(lessonId) => void handleCompleteLesson(lessonId)}
+        onRecordMistake={(lessonId) => void handleRecordLessonMistake(lessonId)}
+      />
+    );
   }
 
   if (screen === "tutorial") {
@@ -4011,6 +4142,14 @@ const styles = StyleSheet.create({
   profileStatusLabel: { color: "#4A2F22", fontSize: 14 },
   profileStatusValue: { color: "#397147", fontSize: 14, fontWeight: "800" },
   profileStatusPending: { color: "#A85B17" },
+  badgesCard: { backgroundColor: "#FFFDF5", borderRadius: 16, padding: 15, marginBottom: 12 },
+  emptyBadgesText: { color: "#4A2F22", fontSize: 14, lineHeight: 20 },
+  badgesList: { gap: 10 },
+  badgeItem: { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#F5F9F7", borderRadius: 14, padding: 12 },
+  badgeTextWrap: { flex: 1 },
+  badgeTitle: { color: "#173B53", fontSize: 15, fontWeight: "900", marginBottom: 4 },
+  badgeSummary: { color: "#36566A", fontSize: 12, lineHeight: 18 },
+  badgeResult: { color: "#28543A", fontSize: 12, fontWeight: "900", marginTop: 6 },
   avatar: { width: 76, height: 76, textAlign: "center", textAlignVertical: "center", borderRadius: 38, backgroundColor: "#E4F0DF", fontSize: 43, marginRight: 12 },
   profileName: { color: "#4A2F22", fontSize: 17, fontWeight: "800" },
   profileHint: { color: "#4A2F22", marginTop: 5 },
@@ -4148,6 +4287,8 @@ const styles = StyleSheet.create({
   darkTrack: { backgroundColor: "#46546A" },
   darkText: { color: "#E4EAF3" },
   darkMutedText: { color: "#B9C5D8" },
+  darkProfileStatusPending: { color: "#F0B273" },
+  darkBadgeResult: { color: "#A7E2BC" },
   loginContainer: { flex: 1, backgroundColor: "transparent" },
   verificationContainer: { flex: 1, justifyContent: "center", padding: 20, gap: 12 },
   resendButton: { backgroundColor: "#587449" },

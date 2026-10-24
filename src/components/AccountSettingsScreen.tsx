@@ -406,7 +406,7 @@ export default function AccountSettingsScreen({
                 value={newName ?? ""}
                 onChangeText={setNewName}
                 placeholder="Name"
-                placeholderTextColor="#8A8175"
+                placeholderTextColor="#6B7280"
               />
               <Text style={[styles.bodyLabel, styles.dateLabel]}>Birthdate</Text>
               <View style={styles.dateRow}>
@@ -425,7 +425,7 @@ export default function AccountSettingsScreen({
                       keyboardType="number-pad"
                       maxLength={maxLength}
                       placeholder={label === "Year" ? "YYYY" : label === "Month" ? "MM" : "DD"}
-                      placeholderTextColor="#8A8175"
+                      placeholderTextColor="#6B7280"
                     />
                   </View>
                 ))}
@@ -579,7 +579,7 @@ export default function AccountSettingsScreen({
           <View style={styles.disclosure}>
             <Text style={styles.bodyLabel}>What is stored</Text>
             <Text style={styles.hint}>
-              Firebase manages the parent account email, password, and sign-in session. On this device, LearnBridge stores child names, birthdates, icons, and these preferences in app storage. Quiz results and lesson progress are held in memory and are not currently saved between app launches.
+              Firebase manages the parent account email, password, and sign-in session. On this device, LearnBridge stores child names, birthdates, icons, preferences, completed lesson IDs, and lesson mistake counts in app storage. Mistakes and completion progress remain available offline between app launches. Earned module badges are also saved locally.
             </Text>
           </View>
           <Pressable
@@ -624,7 +624,7 @@ export default function AccountSettingsScreen({
               value={deletePassword}
               onChangeText={setDeletePassword}
               placeholder="Parent account password"
-              placeholderTextColor="#8A8175"
+              placeholderTextColor="#6B7280"
               secureTextEntry
               autoCapitalize="none"
               editable={!isDeletingAccount}

@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
+  Animated,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -7,6 +9,8 @@ import {
   View,
 } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import AnimatedLearningSticker from "./AnimatedLearningSticker";
+import { awardModuleBadge } from "../data/badges";
 import { playFeedback } from "../utils/soundEffects";
 import GradeThreeMathScreen from "../data/MathematicsCurriculum";
 import {
@@ -71,9 +75,37 @@ type Subject = (typeof subjects)[number];
 
 type Props = {
   onBack?: () => void;
+  completedLessonIds: string[];
+  lessonProgressReady: boolean;
+  onCompleteLesson: (lessonId: string) => void;
+  onRecordMistake: (lessonId: string) => void;
 };
 
-export default function GradeThreeLessonsScreen({ onBack }: Props) {
+function FloatingEmoji({ emoji, style }: { emoji: string; style?: object }) {
+  const offset = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(offset, { toValue: -6, duration: 700, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 6, duration: 700, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 0, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [offset]);
+
+  return <Animated.Text style={[style, { transform: [{ translateY: offset }] }]}>{emoji}</Animated.Text>;
+}
+
+export default function GradeThreeLessonsScreen({
+  onBack,
+  completedLessonIds,
+  lessonProgressReady,
+  onCompleteLesson,
+  onRecordMistake,
+}: Props) {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [selectedLesson, setSelectedLesson] = useState<string | null>(null);
   const [selectedEnglishLesson, setSelectedEnglishLesson] =
@@ -85,6 +117,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
   const [quizProblemIndex, setQuizProblemIndex] = useState(0);
   const [quizFinished, setQuizFinished] = useState(false);
   const [englishScore, setEnglishScore] = useState(0);
+  const [englishMistakes, setEnglishMistakes] = useState(0);
   const [scienceLessonIndex, setScienceLessonIndex] = useState<number | null>(
     null
   );
@@ -98,6 +131,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
     Set<string>
   >(() => new Set());
   const [scienceFinished, setScienceFinished] = useState(false);
+  const [scienceMistakes, setScienceMistakes] = useState(0);
   const scienceScore = scienceCorrectAnswers.size;
   const [healthLessonIndex, setHealthLessonIndex] = useState<number | null>(
     null
@@ -112,6 +146,10 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
     () => new Set()
   );
   const [healthFinished, setHealthFinished] = useState(false);
+  const [healthMistakes, setHealthMistakes] = useState(0);
+  const englishAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scienceAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const healthAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const healthScore = healthCorrectAnswers.size;
   const healthLesson =
     healthLessonIndex === null ? undefined : healthLessons[healthLessonIndex];
@@ -134,6 +172,15 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
           healthLessonQuestionCount) *
         100
       : 0;
+
+  useEffect(
+    () => () => {
+      if (englishAdvanceTimer.current) clearTimeout(englishAdvanceTimer.current);
+      if (scienceAdvanceTimer.current) clearTimeout(scienceAdvanceTimer.current);
+      if (healthAdvanceTimer.current) clearTimeout(healthAdvanceTimer.current);
+    },
+    []
+  );
   const scienceLesson =
     scienceLessonIndex === null
       ? undefined
@@ -184,16 +231,30 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
     totalEnglishQuestions > 0
       ? (completedEnglishQuestions / totalEnglishQuestions) * 100
       : 0;
+  const isEnglishLessonUnlocked = (index: number) =>
+    lessonProgressReady &&
+    (index === 0 ||
+      englishLessons
+        .slice(0, index)
+        .every((lesson) =>
+          completedLessonIds.includes(`grade:3:english:${lesson.id}`)
+        ));
   const openEnglishLesson = (lesson: EnglishLesson) => {
+    const lessonIndex = englishLessons.findIndex((item) => item.id === lesson.id);
+    if (!isEnglishLessonUnlocked(lessonIndex)) return;
+    if (englishAdvanceTimer.current) clearTimeout(englishAdvanceTimer.current);
     setSelectedEnglishLesson(lesson);
     setSelectedQuizAnswer(null);
     setQuizChecked(false);
     setQuizProblemIndex(0);
     setQuizFinished(false);
     setEnglishScore(0);
+    setEnglishMistakes(0);
   };
 
-  const advanceEnglishQuiz = () => {
+  const advanceEnglishQuiz = (wasWrong = false) => {
+    const nextMistakes = englishMistakes + (wasWrong ? 1 : 0);
+    if (wasWrong) setEnglishMistakes(nextMistakes);
     if (quizProblemIndex + 1 < englishQuizzes.length) {
       setQuizProblemIndex((index) => index + 1);
       setSelectedQuizAnswer(null);
@@ -205,12 +266,29 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
       (lesson) => lesson.id === selectedEnglishLesson?.id
     );
     const nextLesson = englishLessons[currentLessonIndex + 1];
+    if (nextMistakes === 0 && selectedEnglishLesson) {
+      const moduleId = `grade:3:english:${selectedEnglishLesson.id}`;
+      onCompleteLesson(moduleId);
+      void awardModuleBadge({
+        moduleId,
+        title: selectedEnglishLesson.title,
+        summary: selectedEnglishLesson.learn.join(" "),
+        resultLabel: `Perfect score · ${englishQuizzes.length}/${englishQuizzes.length} correct`,
+      }).catch((error: unknown) => {
+        Alert.alert(
+          "Badge not saved",
+          error instanceof Error ? error.message : "Check device storage and try again."
+        );
+      });
+    }
 
-    if (nextLesson) {
+    if (nextLesson && nextMistakes === 0) {
       setSelectedEnglishLesson(nextLesson);
       setQuizProblemIndex(0);
       setSelectedQuizAnswer(null);
       setQuizChecked(false);
+      setEnglishScore(0);
+      setEnglishMistakes(0);
       return;
     }
 
@@ -218,12 +296,14 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
   };
 
   const clearEnglishLesson = () => {
+    if (englishAdvanceTimer.current) clearTimeout(englishAdvanceTimer.current);
     setSelectedEnglishLesson(null);
     setSelectedQuizAnswer(null);
     setQuizChecked(false);
     setQuizProblemIndex(0);
     setQuizFinished(false);
     setEnglishScore(0);
+    setEnglishMistakes(0);
   };
 
   const checkEnglishAnswer = () => {
@@ -232,16 +312,27 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
     playFeedback(correct ? "success" : "error");
     if (correct) {
       setEnglishScore((score) => score + 1);
+    } else if (selectedEnglishLesson) {
+      const moduleId = `grade:3:english:${selectedEnglishLesson.id}`;
+      onRecordMistake(moduleId);
+      englishAdvanceTimer.current = setTimeout(() => advanceEnglishQuiz(true), 900);
     }
     setQuizChecked(true);
   };
 
   const restartEnglishAdventure = () => {
-    const firstLesson = englishLessons[0];
-    if (firstLesson) openEnglishLesson(firstLesson);
+    if (selectedEnglishLesson) openEnglishLesson(selectedEnglishLesson);
   };
 
   const startScienceLesson = (index: number) => {
+    if (
+      !lessonProgressReady ||
+      (index > 0 &&
+        !completedLessonIds.includes(`grade:3:science:${index - 1}`))
+    ) {
+      return;
+    }
+    if (scienceAdvanceTimer.current) clearTimeout(scienceAdvanceTimer.current);
     setScienceLessonIndex(index);
     setScienceActivityIndex(0);
     setScienceQuestionIndex(0);
@@ -249,15 +340,51 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
     setScienceChecked(false);
     setScienceCorrectAnswers(new Set());
     setScienceFinished(false);
+    setScienceMistakes(0);
   };
 
   const returnToScienceLessons = () => {
+    if (scienceAdvanceTimer.current) clearTimeout(scienceAdvanceTimer.current);
     setScienceLessonIndex(null);
     setScienceActivityIndex(0);
     setScienceQuestionIndex(0);
     setScienceSelectedAnswer(null);
     setScienceChecked(false);
+    setScienceCorrectAnswers(new Set());
     setScienceFinished(false);
+    setScienceMistakes(0);
+  };
+
+  const advanceScienceQuestion = (wasWrong = false) => {
+    if (!scienceLesson || !scienceActivity) return;
+    const nextMistakes = scienceMistakes + (wasWrong ? 1 : 0);
+    setScienceMistakes(nextMistakes);
+    setScienceSelectedAnswer(null);
+    setScienceChecked(false);
+
+    if (scienceQuestionIndex + 1 < scienceActivity.questions.length) {
+      setScienceQuestionIndex((index) => index + 1);
+    } else if (scienceActivityIndex + 1 < scienceLesson.activities.length) {
+      setScienceActivityIndex((index) => index + 1);
+      setScienceQuestionIndex(0);
+    } else {
+      setScienceFinished(true);
+      if (scienceLesson && scienceLessonIndex !== null && nextMistakes === 0) {
+        const moduleId = `grade:3:science:${scienceLessonIndex}`;
+        onCompleteLesson(moduleId);
+        void awardModuleBadge({
+          moduleId,
+          title: scienceLesson.title,
+          summary: scienceLesson.activities.map((activity) => activity.instruction).join(" "),
+          resultLabel: `Perfect score · ${scienceLessonQuestionCount}/${scienceLessonQuestionCount} correct`,
+        }).catch((error: unknown) => {
+          Alert.alert(
+            "Badge not saved",
+            error instanceof Error ? error.message : "Check device storage and try again."
+          );
+        });
+      }
+    }
   };
 
   const checkScienceAnswer = () => {
@@ -283,41 +410,21 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
       return updatedAnswers;
     });
     setScienceChecked(true);
-  };
-
-  const advanceScienceQuestion = () => {
-    if (!scienceLesson || !scienceActivity || !scienceChecked) return;
-    setScienceSelectedAnswer(null);
-    setScienceChecked(false);
-
-    if (scienceQuestionIndex + 1 < scienceActivity.questions.length) {
-      setScienceQuestionIndex((index) => index + 1);
-    } else if (scienceActivityIndex + 1 < scienceLesson.activities.length) {
-      setScienceActivityIndex((index) => index + 1);
-      setScienceQuestionIndex(0);
-    } else {
-      setScienceFinished(true);
+    if (!correct) {
+      onRecordMistake(`grade:3:science:${scienceLessonIndex}`);
+      scienceAdvanceTimer.current = setTimeout(() => advanceScienceQuestion(true), 900);
     }
-  };
-
-  const goToPreviousScienceQuestion = () => {
-    if (scienceQuestionIndex > 0) {
-      setScienceQuestionIndex((index) => index - 1);
-    } else if (scienceLesson && scienceActivityIndex > 0) {
-      const previousActivityIndex = scienceActivityIndex - 1;
-      const previousActivity = scienceLesson.activities[previousActivityIndex];
-      if (!previousActivity) return;
-      setScienceActivityIndex(previousActivityIndex);
-      setScienceQuestionIndex(previousActivity.questions.length - 1);
-    } else {
-      returnToScienceLessons();
-      return;
-    }
-    setScienceSelectedAnswer(null);
-    setScienceChecked(false);
   };
 
   const startHealthLesson = (index: number) => {
+    if (
+      !lessonProgressReady ||
+      (index > 0 &&
+        !completedLessonIds.includes(`grade:3:health:${index - 1}`))
+    ) {
+      return;
+    }
+    if (healthAdvanceTimer.current) clearTimeout(healthAdvanceTimer.current);
     setHealthLessonIndex(index);
     setHealthActivityIndex(0);
     setHealthQuestionIndex(0);
@@ -325,15 +432,51 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
     setHealthChecked(false);
     setHealthCorrectAnswers(new Set());
     setHealthFinished(false);
+    setHealthMistakes(0);
   };
 
   const returnToHealthLessons = () => {
+    if (healthAdvanceTimer.current) clearTimeout(healthAdvanceTimer.current);
     setHealthLessonIndex(null);
     setHealthActivityIndex(0);
     setHealthQuestionIndex(0);
     setHealthSelectedAnswer(null);
     setHealthChecked(false);
+    setHealthCorrectAnswers(new Set());
     setHealthFinished(false);
+    setHealthMistakes(0);
+  };
+
+  const advanceHealthQuestion = (wasWrong = false) => {
+    if (!healthLesson || !healthActivity) return;
+    const nextMistakes = healthMistakes + (wasWrong ? 1 : 0);
+    setHealthMistakes(nextMistakes);
+    setHealthSelectedAnswer(null);
+    setHealthChecked(false);
+
+    if (healthQuestionIndex + 1 < healthActivity.questions.length) {
+      setHealthQuestionIndex((index) => index + 1);
+    } else if (healthActivityIndex + 1 < healthLesson.activities.length) {
+      setHealthActivityIndex((index) => index + 1);
+      setHealthQuestionIndex(0);
+    } else {
+      setHealthFinished(true);
+      if (healthLesson && healthLessonIndex !== null && nextMistakes === 0) {
+        const moduleId = `grade:3:health:${healthLessonIndex}`;
+        onCompleteLesson(moduleId);
+        void awardModuleBadge({
+          moduleId,
+          title: healthLesson.title,
+          summary: healthLesson.activities.map((activity) => activity.instruction).join(" "),
+          resultLabel: `Perfect score · ${healthLessonQuestionCount}/${healthLessonQuestionCount} correct`,
+        }).catch((error: unknown) => {
+          Alert.alert(
+            "Badge not saved",
+            error instanceof Error ? error.message : "Check device storage and try again."
+          );
+        });
+      }
+    }
   };
 
   const checkHealthAnswer = () => {
@@ -358,38 +501,10 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
       return updatedAnswers;
     });
     setHealthChecked(true);
-  };
-
-  const advanceHealthQuestion = () => {
-    if (!healthLesson || !healthActivity || !healthChecked) return;
-    setHealthSelectedAnswer(null);
-    setHealthChecked(false);
-
-    if (healthQuestionIndex + 1 < healthActivity.questions.length) {
-      setHealthQuestionIndex((index) => index + 1);
-    } else if (healthActivityIndex + 1 < healthLesson.activities.length) {
-      setHealthActivityIndex((index) => index + 1);
-      setHealthQuestionIndex(0);
-    } else {
-      setHealthFinished(true);
+    if (!correct) {
+      onRecordMistake(`grade:3:health:${healthLessonIndex}`);
+      healthAdvanceTimer.current = setTimeout(() => advanceHealthQuestion(true), 900);
     }
-  };
-
-  const goToPreviousHealthQuestion = () => {
-    if (healthQuestionIndex > 0) {
-      setHealthQuestionIndex((index) => index - 1);
-    } else if (healthLesson && healthActivityIndex > 0) {
-      const previousActivityIndex = healthActivityIndex - 1;
-      const previousActivity = healthLesson.activities[previousActivityIndex];
-      if (!previousActivity) return;
-      setHealthActivityIndex(previousActivityIndex);
-      setHealthQuestionIndex(previousActivity.questions.length - 1);
-    } else {
-      returnToHealthLessons();
-      return;
-    }
-    setHealthSelectedAnswer(null);
-    setHealthChecked(false);
   };
 
   const goBackToSubjects = () => {
@@ -432,7 +547,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                   made just for you.
                 </Text>
               </View>
-              <Text style={styles.welcomeEmoji}>🦉</Text>
+              <AnimatedLearningSticker variant="owl" size={92} />
             </View>
 
             <Text style={styles.sectionTitle}>📚 Explore Your Subjects</Text>
@@ -450,7 +565,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                   }}
                   style={[styles.subjectCard, { backgroundColor: subject.color }]}
                 >
-                  <Text style={styles.subjectEmoji}>{subject.emoji}</Text>
+                  <FloatingEmoji emoji={subject.emoji} style={styles.subjectEmoji} />
                   <Text style={styles.subjectName}>{subject.name}</Text>
                   <Text style={styles.subjectDescription}>
                     {subject.name === "English"
@@ -464,15 +579,25 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
             </View>
           </>
         ) : selectedSubject.name === "Mathematics" ? (
-          <GradeThreeMathScreen onBack={goBackToSubjects} />
+          <GradeThreeMathScreen
+            onBack={goBackToSubjects}
+            completedLessonIds={completedLessonIds}
+            lessonProgressReady={lessonProgressReady}
+            onCompleteLesson={onCompleteLesson}
+            onRecordMistake={onRecordMistake}
+          />
         ) : selectedSubject.name === "Science" ? (
           scienceFinished ? (
             <>
               <View style={styles.scienceCompletionCard}>
-                <Text style={styles.scienceCompletionEmoji}>🏆</Text>
-                <Text style={styles.scienceTitle}>Lesson Complete!</Text>
+                <AnimatedLearningSticker variant="coin" size={76} />
+                <Text style={styles.scienceTitle}>
+                  {scienceMistakes === 0 ? "Lesson Complete!" : "Try the lesson again"}
+                </Text>
                 <Text style={styles.bodyText}>
-                  You finished {scienceLesson?.title ?? "your Science lesson"}.
+                  {scienceMistakes === 0
+                    ? `You finished ${scienceLesson?.title ?? "your Science lesson"} with a perfect score.`
+                    : `You made ${scienceMistakes} ${scienceMistakes === 1 ? "mistake" : "mistakes"}. The next lesson is locked until you get every answer right.`}
                 </Text>
                 <Text style={styles.scienceScore}>
                   Your score: {scienceScore} / {scienceLessonQuestionCount}
@@ -482,6 +607,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                 </Text>
                 <View style={styles.practiceActions}>
                   {scienceLessonIndex !== null &&
+                  scienceMistakes === 0 &&
                   scienceLessonIndex + 1 < scienceLessons.length ? (
                     <Pressable
                       accessibilityRole="button"
@@ -530,7 +656,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                 <Text style={styles.backButtonText}>← Back to Subjects</Text>
               </Pressable>
               <View style={styles.subjectHeading}>
-                <Text style={styles.subjectHeadingEmoji}>🔬</Text>
+                <FloatingEmoji emoji="🔬" style={styles.subjectHeadingEmoji} />
                 <View style={styles.subjectHeadingCopy}>
                   <Text style={styles.subjectHeadingTitle}>
                     Science Adventure
@@ -541,25 +667,38 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                 </View>
               </View>
               <View style={styles.lessonList}>
-                {scienceLessons.map((lesson, index) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={lesson.title}
-                    onPress={() => startScienceLesson(index)}
-                    style={styles.lessonCard}
-                  >
-                    <Text style={styles.lessonNumber}>{index + 1}</Text>
-                    <View style={styles.lessonCopy}>
-                      <Text style={styles.lessonName}>
-                        {lesson.emoji} {lesson.title}
+                {scienceLessons.map((lesson, index) => {
+                  const unlocked =
+                    lessonProgressReady &&
+                    (index === 0 ||
+                      completedLessonIds.includes(`grade:3:science:${index - 1}`));
+                  const complete = completedLessonIds.includes(
+                    `grade:3:science:${index}`
+                  );
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !unlocked }}
+                      disabled={!unlocked}
+                      key={lesson.title}
+                      onPress={() => startScienceLesson(index)}
+                      style={styles.lessonCard}
+                    >
+                      <Text style={styles.lessonNumber}>{index + 1}</Text>
+                      <View style={styles.lessonCopy}>
+                        <Text style={styles.lessonName}>
+                          {lesson.emoji} {lesson.title}
+                        </Text>
+                        <Text style={styles.mutedText}>
+                          {lesson.activities.length} activities
+                        </Text>
+                      </View>
+                      <Text style={styles.lessonArrow}>
+                        {complete ? "Replay" : unlocked ? "Start →" : "🔒 Locked"}
                       </Text>
-                      <Text style={styles.mutedText}>
-                        {lesson.activities.length} activities
-                      </Text>
-                    </View>
-                    <Text style={styles.lessonArrow}>Start →</Text>
-                  </Pressable>
-                ))}
+                    </Pressable>
+                  );
+                })}
               </View>
             </>
           ) : (
@@ -664,45 +803,29 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                   </Text>
                 ) : null}
                 <View style={styles.scienceActions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={!scienceSelectedAnswer && !scienceChecked}
-                    onPress={
-                      scienceChecked
-                        ? advanceScienceQuestion
-                        : checkScienceAnswer
-                    }
-                    style={[
-                      styles.practicePrimaryButton,
-                      !scienceSelectedAnswer &&
-                        !scienceChecked &&
-                        styles.disabledPracticeButton,
-                    ]}
-                  >
-                    <Text style={styles.practicePrimaryButtonText}>
-                      {scienceChecked
-                        ? scienceQuestionIndex + 1 <
-                          scienceActivity.questions.length
-                          ? "Next Question →"
-                          : scienceActivityIndex + 1 <
-                            scienceLesson.activities.length
-                          ? "Next Activity →"
-                          : "Finish Lesson 🎉"
-                        : "✓ Check Answer"}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={goToPreviousScienceQuestion}
-                    style={styles.scienceBackQuestionButton}
-                  >
-                    <Text style={styles.practiceSecondaryButtonText}>
-                      {scienceQuestionIndex === 0 &&
-                      scienceActivityIndex === 0
-                        ? "← Back to Lessons"
-                        : "← Previous Question"}
-                    </Text>
-                  </Pressable>
+                  {!scienceChecked || scienceSelectedAnswer === scienceQuestion.answer ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={!scienceSelectedAnswer && !scienceChecked}
+                      onPress={scienceChecked ? () => advanceScienceQuestion() : checkScienceAnswer}
+                      style={[
+                        styles.practicePrimaryButton,
+                        !scienceSelectedAnswer &&
+                          !scienceChecked &&
+                          styles.disabledPracticeButton,
+                      ]}
+                    >
+                      <Text style={styles.practicePrimaryButtonText}>
+                        {scienceChecked
+                          ? scienceQuestionIndex + 1 < scienceActivity.questions.length
+                            ? "Next Question →"
+                            : scienceActivityIndex + 1 < scienceLesson.activities.length
+                              ? "Next Activity →"
+                              : "Finish Lesson 🎉"
+                          : "✓ Check Answer"}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             </>
@@ -710,10 +833,14 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
         ) : selectedSubject.name === "Health/PE" ? (
           healthFinished ? (
             <View style={styles.scienceCompletionCard}>
-              <Text style={styles.scienceCompletionEmoji}>🏆</Text>
-              <Text style={styles.scienceTitle}>Health Lesson Complete!</Text>
+              <AnimatedLearningSticker variant="coin" size={76} />
+              <Text style={styles.scienceTitle}>
+                {healthMistakes === 0 ? "Health Lesson Complete!" : "Try the lesson again"}
+              </Text>
               <Text style={styles.bodyText}>
-                You finished {healthLesson?.title ?? "your Health/PE lesson"}.
+                {healthMistakes === 0
+                  ? `You finished ${healthLesson?.title ?? "your Health/PE lesson"} with a perfect score.`
+                  : `You made ${healthMistakes} ${healthMistakes === 1 ? "mistake" : "mistakes"}. The next lesson is locked until you get every answer right.`}
               </Text>
               <Text style={styles.scienceScore}>
                 Your score: {healthScore} / {healthLessonQuestionCount}
@@ -723,6 +850,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
               </Text>
               <View style={styles.practiceActions}>
                 {healthLessonIndex !== null &&
+                healthMistakes === 0 &&
                 healthLessonIndex + 1 < healthLessons.length ? (
                   <Pressable
                     accessibilityRole="button"
@@ -768,7 +896,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                 <Text style={styles.backButtonText}>← Back to Subjects</Text>
               </Pressable>
               <View style={styles.subjectHeading}>
-                <Text style={styles.subjectHeadingEmoji}>🏃</Text>
+                <FloatingEmoji emoji="🏃" style={styles.subjectHeadingEmoji} />
                 <View style={styles.subjectHeadingCopy}>
                   <Text style={styles.subjectHeadingTitle}>
                     Health/PE Adventure
@@ -779,25 +907,38 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                 </View>
               </View>
               <View style={styles.lessonList}>
-                {healthLessons.map((lesson, index) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={lesson.title}
-                    onPress={() => startHealthLesson(index)}
-                    style={styles.lessonCard}
-                  >
-                    <Text style={styles.lessonNumber}>{index + 1}</Text>
-                    <View style={styles.lessonCopy}>
-                      <Text style={styles.lessonName}>
-                        {lesson.emoji} {lesson.title}
+                {healthLessons.map((lesson, index) => {
+                  const unlocked =
+                    lessonProgressReady &&
+                    (index === 0 ||
+                      completedLessonIds.includes(`grade:3:health:${index - 1}`));
+                  const complete = completedLessonIds.includes(
+                    `grade:3:health:${index}`
+                  );
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !unlocked }}
+                      disabled={!unlocked}
+                      key={lesson.title}
+                      onPress={() => startHealthLesson(index)}
+                      style={styles.lessonCard}
+                    >
+                      <Text style={styles.lessonNumber}>{index + 1}</Text>
+                      <View style={styles.lessonCopy}>
+                        <Text style={styles.lessonName}>
+                          {lesson.emoji} {lesson.title}
+                        </Text>
+                        <Text style={styles.mutedText}>
+                          {lesson.activities.length} activities
+                        </Text>
+                      </View>
+                      <Text style={styles.lessonArrow}>
+                        {complete ? "Replay" : unlocked ? "Start →" : "🔒 Locked"}
                       </Text>
-                      <Text style={styles.mutedText}>
-                        {lesson.activities.length} activities
-                      </Text>
-                    </View>
-                    <Text style={styles.lessonArrow}>Start →</Text>
-                  </Pressable>
-                ))}
+                    </Pressable>
+                  );
+                })}
               </View>
             </>
           ) : (
@@ -900,44 +1041,33 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                   </Text>
                 ) : null}
                 <View style={styles.scienceActions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={!healthSelectedAnswer && !healthChecked}
-                    onPress={
-                      healthChecked
-                        ? advanceHealthQuestion
-                        : checkHealthAnswer
-                    }
-                    style={[
-                      styles.practicePrimaryButton,
-                      !healthSelectedAnswer &&
-                        !healthChecked &&
-                        styles.disabledPracticeButton,
-                    ]}
-                  >
-                    <Text style={styles.practicePrimaryButtonText}>
-                      {healthChecked
-                        ? healthQuestionIndex + 1 <
-                          healthActivity.questions.length
-                          ? "Next Question →"
-                          : healthActivityIndex + 1 <
-                            healthLesson.activities.length
-                          ? "Next Activity →"
-                          : "Finish Lesson 🎉"
-                        : "✓ Check Answer"}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={goToPreviousHealthQuestion}
-                    style={styles.scienceBackQuestionButton}
-                  >
-                    <Text style={styles.practiceSecondaryButtonText}>
-                      {healthQuestionIndex === 0 && healthActivityIndex === 0
-                        ? "← Back to Lessons"
-                        : "← Previous Question"}
-                    </Text>
-                  </Pressable>
+                  {!healthChecked || healthSelectedAnswer === healthQuestion.answer ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={!healthSelectedAnswer && !healthChecked}
+                      onPress={
+                        healthChecked
+                          ? () => advanceHealthQuestion()
+                          : checkHealthAnswer
+                      }
+                      style={[
+                        styles.practicePrimaryButton,
+                        !healthSelectedAnswer &&
+                          !healthChecked &&
+                          styles.disabledPracticeButton,
+                      ]}
+                    >
+                      <Text style={styles.practicePrimaryButtonText}>
+                        {healthChecked
+                          ? healthQuestionIndex + 1 < healthActivity.questions.length
+                            ? "Next Question →"
+                            : healthActivityIndex + 1 < healthLesson.activities.length
+                              ? "Next Activity →"
+                              : "Finish Lesson 🎉"
+                          : "✓ Check Answer"}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             </>
@@ -953,9 +1083,10 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
             </Pressable>
 
             <View style={styles.subjectHeading}>
-              <Text style={styles.subjectHeadingEmoji}>
-                {selectedSubject.emoji}
-              </Text>
+              <FloatingEmoji
+                emoji={selectedSubject.emoji}
+                style={styles.subjectHeadingEmoji}
+              />
               <View style={styles.subjectHeadingCopy}>
                 <Text style={styles.subjectHeadingTitle}>
                   {selectedSubject.name}
@@ -965,21 +1096,31 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
             </View>
 
             <View style={styles.lessonList}>
-              {englishLessons.map((lesson, index) => (
-                <Pressable
-                  accessibilityRole="button"
-                  key={lesson.id}
-                  onPress={() => openEnglishLesson(lesson)}
-                  style={styles.lessonCard}
-                >
-                  <Text style={styles.lessonNumber}>{index + 1}</Text>
-                  <View style={styles.lessonCopy}>
-                    <Text style={styles.lessonName}>{lesson.title}</Text>
-                    <Text style={styles.mutedText}>{lesson.description}</Text>
-                  </View>
-                  <Text style={styles.lessonArrow}>Start →</Text>
-                </Pressable>
-              ))}
+              {englishLessons.map((lesson, index) => {
+                const unlocked = isEnglishLessonUnlocked(index);
+                const complete = completedLessonIds.includes(
+                  `grade:3:english:${lesson.id}`
+                );
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !unlocked }}
+                    disabled={!unlocked}
+                    key={lesson.id}
+                    onPress={() => openEnglishLesson(lesson)}
+                    style={styles.lessonCard}
+                  >
+                    <Text style={styles.lessonNumber}>{index + 1}</Text>
+                    <View style={styles.lessonCopy}>
+                      <Text style={styles.lessonName}>{lesson.title}</Text>
+                      <Text style={styles.mutedText}>{lesson.description}</Text>
+                    </View>
+                    <Text style={styles.lessonArrow}>
+                      {complete ? "Replay" : unlocked ? "Start →" : "🔒 Locked"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </>
         ) : selectedEnglishLesson ? (
@@ -993,7 +1134,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
             </Pressable>
 
             <View style={styles.lessonContent}>
-              <Text style={styles.bigEmoji}>{selectedEnglishLesson.emoji}</Text>
+              <FloatingEmoji emoji={selectedEnglishLesson.emoji} style={styles.bigEmoji} />
               <Text style={styles.subjectLabel}>English</Text>
               <Text style={styles.lessonTitle}>
                 {selectedEnglishLesson.title}
@@ -1028,10 +1169,16 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                 {quizFinished ? (
                   <>
                     <Text style={styles.practiceTitle}>
-                      🎉 English Adventure Complete!
+                      {englishMistakes === 0
+                        ? "🎉 Perfect lesson!"
+                        : "💪 Try this lesson again"}
                     </Text>
                     <Text style={styles.bodyText}>
-                      You answered {englishScore} of {totalEnglishQuestions} questions correctly.
+                      You answered {englishScore} of {englishQuizzes.length} questions correctly, with{" "}
+                      {englishMistakes} {englishMistakes === 1 ? "mistake" : "mistakes"}.
+                      {englishMistakes === 0
+                        ? " The next lesson is unlocked!"
+                        : " The next lesson stays locked until you get every answer right."}
                     </Text>
                     <View style={styles.practiceActions}>
                       <Pressable
@@ -1040,7 +1187,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                         style={styles.practicePrimaryButton}
                       >
                         <Text style={styles.practicePrimaryButtonText}>
-                          ↻ Play Again
+                          ↻ Try Again
                         </Text>
                       </Pressable>
                       <Pressable
@@ -1136,19 +1283,31 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
                           </Text>
                         </Pressable>
                       ) : (
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={advanceEnglishQuiz}
-                          style={styles.practicePrimaryButton}
-                        >
-                          <Text style={styles.practicePrimaryButtonText}>
-                            {quizProblemIndex + 1 < englishQuizzes.length
-                              ? "Next Problem →"
-                              : selectedEnglishLessonIndex + 1 < englishLessons.length
-                                ? "Next Lesson →"
-                                : "Finish Adventure"}
-                          </Text>
-                        </Pressable>
+                        selectedQuizAnswer === englishQuiz.correctAnswer ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => advanceEnglishQuiz()}
+                            style={styles.practicePrimaryButton}
+                          >
+                            <Text style={styles.practicePrimaryButtonText}>
+                              {quizProblemIndex + 1 < englishQuizzes.length
+                                ? "Next Problem →"
+                                : selectedEnglishLessonIndex + 1 < englishLessons.length
+                                  ? "Next Lesson →"
+                                  : "Finish Adventure"}
+                            </Text>
+                          </Pressable>
+                        ) : (
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={restartEnglishAdventure}
+                            style={styles.practicePrimaryButton}
+                          >
+                            <Text style={styles.practicePrimaryButtonText}>
+                              RESTART LESSON
+                            </Text>
+                          </Pressable>
+                        )
                       )}
                       <Pressable
                         accessibilityRole="button"
@@ -1184,7 +1343,7 @@ export default function GradeThreeLessonsScreen({ onBack }: Props) {
             </Pressable>
 
             <View style={styles.lessonContent}>
-              <Text style={styles.bigEmoji}>{selectedSubject.emoji}</Text>
+              <FloatingEmoji emoji={selectedSubject.emoji} style={styles.bigEmoji} />
               <Text style={styles.subjectLabel}>{selectedSubject.name}</Text>
               <Text style={styles.lessonTitle}>{selectedLesson}</Text>
               <Text style={styles.bodyText}>
@@ -1279,9 +1438,6 @@ const styles = StyleSheet.create({
     fontSize: 23,
     fontWeight: "800",
     marginBottom: 8,
-  },
-  welcomeEmoji: {
-    fontSize: 56,
   },
   bodyText: {
     color: "#526078",
@@ -1532,10 +1688,6 @@ const styles = StyleSheet.create({
     padding: 26,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
-  },
-  scienceCompletionEmoji: {
-    fontSize: 66,
-    marginBottom: 14,
   },
   scienceScore: {
     color: "#268B68",
