@@ -1,5 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   SafeAreaView,
   ScrollView,
@@ -8,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { gradeTwoLessonQuizBanks } from "../data/gradeTwoLessonQuizBanks";
+import { awardModuleBadge } from "../data/badges";
 import {
   gradeTwoQuizBanks,
   type LessonDifficulty,
@@ -17,6 +19,7 @@ import type { CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { AppAppearanceContext } from "./CloudBackdrop";
 import LessonInstructionModal from "./LessonInstructionModal";
+import AnimatedLearningSticker from "./AnimatedLearningSticker";
 import { playFeedback } from "../utils/soundEffects";
 import GradeTwoMiniGame, {
   gradeTwoMiniGameInfo,
@@ -207,6 +210,7 @@ function LessonQuestionChallenge({
   questionIndex,
   onQuestionIndexChange,
   onCheckpoint,
+  onMistake,
 }: {
   questions: QuizQuestion[];
   difficulty: LessonDifficulty;
@@ -214,10 +218,12 @@ function LessonQuestionChallenge({
   questionIndex: number;
   onQuestionIndexChange: (questionIndex: number) => void;
   onCheckpoint: (checkpoint: Exclude<MiniGameCheckpoint, "none">) => void;
+  onMistake: () => void;
 }) {
   const [selectedOption, setSelectedOption] = useState("");
   const [answeredCorrectly, setAnsweredCorrectly] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const question = questions[questionIndex];
   const levelOffset = difficulty === "easy" ? 0 : difficulty === "standard" ? 1 : 2;
   const answerIndex = question.options.indexOf(question.answer);
@@ -229,19 +235,6 @@ function LessonQuestionChallenge({
     ...question.options.slice(0, optionOffset),
   ];
   const isLastQuestion = questionIndex === questions.length - 1;
-
-  const chooseOption = (option: string) => {
-    setSelectedOption(option);
-    const isCorrect = option === question.answer;
-    playFeedback(isCorrect ? "success" : "error");
-    if (isCorrect) {
-      setAnsweredCorrectly(true);
-      setFeedback("Great job! That's correct! ⭐");
-    } else {
-      setAnsweredCorrectly(false);
-      setFeedback("Not quite right. Try again!");
-    }
-  };
 
   const continueChallenge = () => {
     if (isLastQuestion) {
@@ -256,6 +249,29 @@ function LessonQuestionChallenge({
     setSelectedOption("");
     setAnsweredCorrectly(false);
     setFeedback("");
+  };
+
+  useEffect(
+    () => () => {
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    },
+    []
+  );
+
+  const chooseOption = (option: string) => {
+    if (selectedOption) return;
+    setSelectedOption(option);
+    const isCorrect = option === question.answer;
+    playFeedback(isCorrect ? "success" : "error");
+    if (isCorrect) {
+      setAnsweredCorrectly(true);
+      setFeedback("Great job! That's correct! ⭐");
+    } else {
+      setAnsweredCorrectly(false);
+      setFeedback("Good try! Moving to the next question.");
+      onMistake();
+      advanceTimer.current = setTimeout(continueChallenge, 900);
+    }
   };
 
   return (
@@ -288,13 +304,17 @@ function LessonQuestionChallenge({
           return (
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ selected }}
+              accessibilityState={{ selected, disabled: Boolean(selectedOption) }}
               key={option}
+              disabled={Boolean(selectedOption)}
               onPress={() => chooseOption(option)}
               style={({ pressed }) => [
                 styles.answerOption,
                 darkMode && styles.darkAnswerOption,
                 selected && (answeredCorrectly ? styles.correctAnswer : styles.incorrectAnswer),
+                selected &&
+                  darkMode &&
+                  (answeredCorrectly ? styles.darkCorrectAnswer : styles.darkIncorrectAnswer),
                 pressed && styles.pressed,
               ]}
             >
@@ -311,6 +331,7 @@ function LessonQuestionChallenge({
           style={[
             styles.questionFeedback,
             answeredCorrectly ? styles.correctFeedback : styles.retryFeedback,
+            darkMode && (answeredCorrectly ? styles.darkCorrectFeedback : styles.darkRetryFeedback),
           ]}
         >
           {feedback}
@@ -338,6 +359,7 @@ type Props = {
   completedLessonIds: string[];
   lessonProgressReady: boolean;
   onCompleteLesson: (lessonId: string) => void;
+  onRecordMistake: (lessonId: string) => void;
 };
 
 export default function GradeTwoLessonsScreen({
@@ -347,6 +369,7 @@ export default function GradeTwoLessonsScreen({
   completedLessonIds,
   lessonProgressReady,
   onCompleteLesson,
+  onRecordMistake,
 }: Props) {
   const { darkMode } = useContext(AppAppearanceContext);
   const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
@@ -354,6 +377,7 @@ export default function GradeTwoLessonsScreen({
   const [lessonStarted, setLessonStarted] = useState(false);
   const [assessmentStarted, setAssessmentStarted] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [attemptMistakes, setAttemptMistakes] = useState(0);
   const [miniGameCheckpoint, setMiniGameCheckpoint] = useState<MiniGameCheckpoint>("none");
   const [finished, setFinished] = useState(false);
   const previousCompletedRef = useRef(new Set(completedLessonIds));
@@ -449,8 +473,10 @@ export default function GradeTwoLessonsScreen({
   }, [activeLesson, unlockFade, unlockScale, unlockingLessonId]);
 
   const resetGame = () => {
+    setLessonStarted(false);
     setAssessmentStarted(false);
     setCurrentQuestionIndex(0);
+    setAttemptMistakes(0);
     setMiniGameCheckpoint("none");
     setFinished(false);
   };
@@ -474,6 +500,7 @@ export default function GradeTwoLessonsScreen({
     setLessonStarted(false);
     setAssessmentStarted(false);
     setCurrentQuestionIndex(0);
+    setAttemptMistakes(0);
     setMiniGameCheckpoint("none");
     setFinished(false);
   };
@@ -497,9 +524,10 @@ export default function GradeTwoLessonsScreen({
         </Pressable>
 
         <View style={[styles.header, darkMode && styles.darkCard]}>
-          <Text style={styles.headerIcon}>
-            {activeSubject?.emoji ?? "🌈"}
-          </Text>
+          <AnimatedLearningSticker
+            variant={activeSubject?.id === "math" ? "coin" : activeSubject?.id === "science" ? "plant" : "owl"}
+            size={58}
+          />
           <Text style={[styles.gradeLabel, darkMode && styles.darkMutedText]}>GRADE 2 ONLINE LESSONS</Text>
           <Text style={[styles.title, darkMode && styles.darkText]}>
             {activeLesson?.title ?? activeSubject?.title ?? "Choose an adventure"}
@@ -521,12 +549,14 @@ export default function GradeTwoLessonsScreen({
                   <Text style={styles.finishEmoji}>🏆</Text>
                 </View>
                 <Text style={[styles.finishTitle, darkMode && styles.darkText]}>
-                  Quarter complete!
+                  {attemptMistakes === 0 ? "Quarter complete!" : "Try again for a perfect score"}
                 </Text>
                 <Text style={[styles.finishHint, darkMode && styles.darkMutedText]}>
-                  Great work finishing {activeSubject.title} on {difficultyLabels[difficulty]} difficulty!
+                  {attemptMistakes === 0
+                    ? `Perfect! You finished ${activeLesson.title} with no mistakes.`
+                    : `You made ${attemptMistakes} ${attemptMistakes === 1 ? "mistake" : "mistakes"} in ${activeLesson.title}. This quarter stays locked until you get every question right.`}
                 </Text>
-                <Text style={styles.finishStars}>⭐⭐⭐</Text>
+                <Text style={styles.finishStars}>{attemptMistakes === 0 ? "⭐⭐⭐" : "💪"}</Text>
                 <View style={styles.finishStats}>
                   <View style={[styles.finishStat, darkMode && styles.darkFinishStat]}>
                     <Text style={styles.finishStatEmoji}>✅</Text>
@@ -534,7 +564,7 @@ export default function GradeTwoLessonsScreen({
                       Questions
                     </Text>
                     <Text style={[styles.finishStatValue, darkMode && styles.darkText]}>
-                      {questionCount}
+                      {Math.max(0, questionCount - attemptMistakes)} / {questionCount}
                     </Text>
                   </View>
                   <View style={[styles.finishStat, darkMode && styles.darkFinishStat]}>
@@ -546,6 +576,15 @@ export default function GradeTwoLessonsScreen({
                       {difficultyLabels[difficulty]}
                     </Text>
                   </View>
+                  <View style={[styles.finishStat, darkMode && styles.darkFinishStat]}>
+                    <Text style={styles.finishStatEmoji}>💡</Text>
+                    <Text style={[styles.finishStatLabel, darkMode && styles.darkMutedText]}>
+                      Mistakes
+                    </Text>
+                    <Text style={[styles.finishStatValue, darkMode && styles.darkText]}>
+                      {attemptMistakes}
+                    </Text>
+                  </View>
                 </View>
                 <Pressable
                   accessibilityRole="button"
@@ -555,7 +594,9 @@ export default function GradeTwoLessonsScreen({
                     pressed && styles.pressed,
                   ]}
                 >
-                  <Text style={styles.replayButtonText}>↻ PLAY AGAIN</Text>
+                  <Text style={styles.replayButtonText}>
+                    {attemptMistakes === 0 ? "↻ PLAY AGAIN" : "↻ TRY AGAIN"}
+                  </Text>
                 </Pressable>
               </View>
             ) : isLessonLocked ? (
@@ -592,6 +633,10 @@ export default function GradeTwoLessonsScreen({
                     questionIndex={currentQuestionIndex}
                     onQuestionIndexChange={setCurrentQuestionIndex}
                     onCheckpoint={setMiniGameCheckpoint}
+                    onMistake={() => {
+                      setAttemptMistakes((count) => count + 1);
+                      if (currentLessonId) onRecordMistake(currentLessonId);
+                    }}
                   />
                 ) : (
                   <GradeTwoMiniGame
@@ -612,8 +657,26 @@ export default function GradeTwoLessonsScreen({
                       }
 
                       if (miniGameCheckpoint === "end-quiz") {
-                        if (currentLessonId && !isLessonComplete) {
+                        if (
+                          attemptMistakes === 0 &&
+                          currentLessonId &&
+                          activeLesson &&
+                          !isLessonComplete
+                        ) {
                           onCompleteLesson(currentLessonId);
+                          void awardModuleBadge({
+                            moduleId: currentLessonId,
+                            title: activeLesson.title,
+                            summary: `${activeLesson.overview} ${activeLesson.topics.join(" ")}`,
+                            resultLabel: `Perfect score · ${questionCount}/${questionCount} correct`,
+                          }).catch((error: unknown) => {
+                            Alert.alert(
+                              "Badge not saved",
+                              error instanceof Error
+                                ? error.message
+                                : "Check device storage and try again."
+                            );
+                          });
                         }
                         setMiniGameCheckpoint("none");
                         setFinished(true);
@@ -750,9 +813,13 @@ export default function GradeTwoLessonsScreen({
         <View style={[styles.quarterFooter, darkMode && styles.darkFooter]}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={nextLesson ? "Continue to next quarter" : "Back to lessons"}
+            accessibilityLabel={
+              nextLesson && attemptMistakes === 0
+                ? "Continue to next quarter"
+                : "Back to lessons"
+            }
             onPress={() => {
-              if (nextLesson) {
+              if (nextLesson && attemptMistakes === 0) {
                 startLesson(nextLesson);
               } else {
                 setActiveLesson(null);
@@ -766,7 +833,9 @@ export default function GradeTwoLessonsScreen({
             ]}
           >
             <Text style={styles.difficultyButtonText}>
-              {nextLesson ? "NEXT QUARTER →" : "BACK TO LESSONS"}
+              {nextLesson && attemptMistakes === 0
+                ? "NEXT QUARTER →"
+                : "BACK TO LESSONS"}
             </Text>
           </Pressable>
         </View>
@@ -795,7 +864,6 @@ const styles = StyleSheet.create({
   backButton: { alignSelf: "flex-start", minHeight: 42, minWidth: 64, borderRadius: 8, backgroundColor: "#C62828", alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
   backButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
   header: { alignItems: "center", backgroundColor: "#DDF5F2", borderRadius: 20, marginBottom: 20, padding: 22 },
-  headerIcon: { fontSize: 42 },
   gradeLabel: { color: "#258EA3", fontSize: 11, fontWeight: "900", letterSpacing: 1, marginTop: 8 },
   title: { color: "#173B53", fontSize: 25, fontWeight: "900", marginTop: 5, textAlign: "center" },
   subtitle: { color: "#36566A", fontSize: 15, marginTop: 6, textAlign: "center" },
@@ -863,10 +931,14 @@ const styles = StyleSheet.create({
   darkAnswerOption: { backgroundColor: "#26334A", borderColor: "#465671" },
   correctAnswer: { backgroundColor: "#D5F5EB", borderColor: "#66CBB1" },
   incorrectAnswer: { backgroundColor: "#FFF0EB", borderColor: "#F17D65" },
+  darkCorrectAnswer: { backgroundColor: "#22503B", borderColor: "#61B891" },
+  darkIncorrectAnswer: { backgroundColor: "#5B2A32", borderColor: "#D7776A" },
   answerOptionText: { color: "#173B53", fontSize: 15, fontWeight: "800", textAlign: "center" },
   questionFeedback: { fontSize: 14, fontWeight: "800", lineHeight: 20, marginTop: 12, textAlign: "center" },
   correctFeedback: { color: "#315C4A" },
   retryFeedback: { color: "#A94D3D" },
+  darkCorrectFeedback: { color: "#A7E2BC" },
+  darkRetryFeedback: { color: "#FFC0B5" },
   replayButton: { alignItems: "center", backgroundColor: "#258EA3", borderRadius: 13, justifyContent: "center", marginTop: 16, minHeight: 50, paddingHorizontal: 18 },
   replayButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   quarterFooter: { backgroundColor: "#FFFFFF", borderTopColor: "#CDEEF1", borderTopWidth: 1, paddingHorizontal: 20, paddingVertical: 12 },

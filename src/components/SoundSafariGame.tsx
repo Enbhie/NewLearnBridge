@@ -1,5 +1,5 @@
 import * as Speech from "expo-speech";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
@@ -23,7 +23,6 @@ const BANK: Record<string, { say: string; words: Word[] }> = {
 };
 
 const ROUNDS = 3;
-const PASS_SCORE = 2;
 const LEVEL_LABELS = ["Easy", "Standard", "Challenge"];
 
 function shuffle<T>(items: T[]): T[] {
@@ -57,10 +56,12 @@ export default function SoundSafariGame({
   level,
   onExit,
   onPassed,
+  onMistake,
 }: {
   level: number;
   onExit: () => void;
   onPassed: () => void;
+  onMistake: () => void;
 }) {
   const { darkMode } = useContext(AppAppearanceContext);
   const rounds = useMemo(() => buildRounds(level), [level]);
@@ -68,7 +69,9 @@ export default function SoundSafariGame({
   const [picked, setPicked] = useState<number[]>([]);
   const [checked, setChecked] = useState<null | boolean>(null);
   const [score, setScore] = useState(0);
+  const [mistakes, setMistakes] = useState(0);
   const [finished, setFinished] = useState(false);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const current = rounds[round];
   const sound = BANK[current.letter].say;
@@ -86,11 +89,31 @@ export default function SoundSafariGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round, finished]);
 
+  useEffect(
+    () => () => {
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    },
+    []
+  );
+
   const toggle = (index: number) => {
     if (checked !== null) return;
     Speech.stop();
     Speech.speak(current.tiles[index].word, { rate: 0.8 });
     setPicked((p) => (p.includes(index) ? p.filter((i) => i !== index) : [...p, index]));
+  };
+
+  const next = (wasWrong = false) => {
+    const nextMistakes = mistakes + (wasWrong ? 1 : 0);
+    setMistakes(nextMistakes);
+    if (round + 1 >= ROUNDS) {
+      setFinished(true);
+      if (nextMistakes === 0) onPassed();
+      return;
+    }
+    setRound(round + 1);
+    setPicked([]);
+    setChecked(null);
   };
 
   const check = () => {
@@ -100,29 +123,22 @@ export default function SoundSafariGame({
     setChecked(correct);
     playFeedback(correct ? "success" : "error");
     if (correct) setScore((s) => s + 1);
-  };
-
-  const next = () => {
-    if (round + 1 >= ROUNDS) {
-      setFinished(true);
-      if (score >= PASS_SCORE) onPassed();
-      return;
+    else {
+      onMistake();
+      advanceTimer.current = setTimeout(() => next(true), 900);
     }
-    setRound(round + 1);
-    setPicked([]);
-    setChecked(null);
   };
 
   if (finished) {
-    const passed = score >= PASS_SCORE;
+    const passed = mistakes === 0;
     return (
       <SafeAreaView style={[styles.page, darkMode && styles.darkPage]}>
         <View style={styles.center}>
           <Text style={styles.bigEmoji}>{passed ? "🌟" : "💪"}</Text>
           <Text style={[styles.title, darkMode && styles.darkText]}>{passed ? "Great listening!" : "Try again!"}</Text>
           <Text style={[styles.sub, darkMode && styles.darkMutedText]}>
-            You got {score} of {ROUNDS} right.
-            {passed ? " You earned a star!" : " Get 2 right to earn a star."}
+            You got {score} of {ROUNDS} right, with {mistakes} {mistakes === 1 ? "mistake" : "mistakes"}.
+            {passed ? " You earned a star!" : " Try the whole lesson again for a perfect score."}
           </Text>
           <Pressable onPress={onExit} style={styles.primaryBtn}>
             <Text style={styles.primaryBtnText}>BACK TO GAMES</Text>
@@ -190,11 +206,13 @@ export default function SoundSafariGame({
             <Text style={[styles.feedback, checked ? styles.good : styles.bad]}>
               {checked ? "🦉 You found them all!" : "🦉 Almost! Green ones start with the sound."}
             </Text>
-            <Pressable onPress={next} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>
-                {round + 1 >= ROUNDS ? "SEE RESULTS" : "NEXT"}
-              </Text>
-            </Pressable>
+            {checked ? (
+              <Pressable onPress={() => next()} style={styles.primaryBtn}>
+                <Text style={styles.primaryBtnText}>
+                  {round + 1 >= ROUNDS ? "SEE RESULTS" : "NEXT"}
+                </Text>
+              </Pressable>
+            ) : null}
           </>
         )}
       </ScrollView>

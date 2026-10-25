@@ -1,8 +1,9 @@
-import { useContext, useState } from "react";
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
-import { gradeLabels } from "../data/offlineMissions";
+import { useContext, useEffect, useRef, useState } from "react";
+import { Animated, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import { categoryMeta, lessonContent, type CategoryId } from "../data/learningContent";
+import { gradeLabels } from "../data/offlineMissions";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import AnimatedLearningSticker from "./AnimatedLearningSticker";
 import { AppAppearanceContext } from "./CloudBackdrop";
 import LessonInstructionModal from "./LessonInstructionModal";
 
@@ -11,6 +12,23 @@ type Props = {
   onBack: () => void;
   onContinue: () => void;
 };
+
+function FloatingEmoji({ emoji, style }: { emoji: string; style?: object }) {
+  const offset = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(offset, { toValue: -6, duration: 700, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 6, duration: 700, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 0, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
+    return () => offset.stopAnimation();
+  }, [offset]);
+
+  return <Animated.Text style={[style, { transform: [{ translateY: offset }] }]}>{emoji}</Animated.Text>;
+}
 
 export default function LessonScreen({ category, onBack, onContinue }: Props) {
   const { darkMode } = useContext(AppAppearanceContext);
@@ -42,6 +60,11 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
             <Text style={[styles.pillText, darkMode && styles.darkText]}>{gradeLabel} · Lesson 1</Text>
           </View>
           <Text style={styles.bannerTitle}>{content.title}</Text>
+          <AnimatedLearningSticker
+            variant="owl"
+            size={76}
+            style={styles.bannerSticker}
+          />
         </View>
 
         <View style={[styles.storeStrip, darkMode && styles.darkCard]}>
@@ -50,21 +73,21 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
           </View>
           <View style={styles.storeRow}>
             <View style={styles.storeStall}>
-              <Text style={styles.storeEmoji}>{content.items[0]?.emoji ?? meta.emoji}</Text>
+              <FloatingEmoji emoji={content.items[0]?.emoji ?? meta.emoji} style={styles.storeEmoji} />
             </View>
             <View style={[styles.speechBubble, darkMode && styles.darkInnerCard]}>
               <Text style={[styles.speechText, darkMode && styles.darkText]}>{content.storyLine}</Text>
             </View>
             <View style={styles.storeFriends}>
-              <Text style={styles.owlFriend}>🦉</Text>
-              <Text style={styles.personEmoji}>🧒</Text>
+              <AnimatedLearningSticker variant="owl" size={48} />
+              <AnimatedLearningSticker variant="plant" size={36} />
             </View>
           </View>
         </View>
 
         <View style={[styles.rememberCard, darkMode && styles.darkCard]}>
           <View style={styles.rememberHeader}>
-            <Text style={styles.lightbulb}>💡</Text>
+            <FloatingEmoji emoji="💡" style={styles.lightbulb} />
             <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>{content.rememberTitle}</Text>
           </View>
           <Text style={[styles.mutedText, darkMode && styles.darkMutedText]}>{content.rememberText}</Text>
@@ -83,7 +106,7 @@ export default function LessonScreen({ category, onBack, onContinue }: Props) {
                 index === 0 ? styles.priceTagBlue : index === 1 ? styles.priceTagCoral : styles.priceTagYellow,
               ]}
             >
-              <Text style={styles.itemEmoji}>{item.emoji}</Text>
+              <FloatingEmoji emoji={item.emoji} style={styles.itemEmoji} />
               <Text style={[styles.itemName, darkMode && styles.darkText]}>{item.name}</Text>
               {item.price !== undefined ? (
                 <Text style={styles.itemPrice}>₱{item.price}</Text>
@@ -148,7 +171,7 @@ const styles = StyleSheet.create({
   },
   hearts: { fontSize: 14 },
   body: { padding: 20, paddingBottom: 24 },
-  banner: { backgroundColor: "#258EA3", borderRadius: 22, padding: 20, borderBottomWidth: 7, borderBottomColor: "#F4C451" },
+  banner: { backgroundColor: "#258EA3", borderRadius: 22, padding: 20, paddingRight: 84, borderBottomWidth: 7, borderBottomColor: "#F4C451", overflow: "hidden" },
   pill: {
     alignSelf: "flex-start",
     backgroundColor: "#FFE181",
@@ -158,6 +181,7 @@ const styles = StyleSheet.create({
   },
   pillText: { color: "#173B53", fontSize: 13, fontWeight: "800" },
   bannerTitle: { color: "#FFFFFF", fontSize: 30, fontWeight: "900", marginTop: 8 },
+  bannerSticker: { position: "absolute", right: 8, bottom: 4 },
   storeStrip: {
     backgroundColor: "#B8EDF3",
     borderRadius: 18,
@@ -197,8 +221,6 @@ const styles = StyleSheet.create({
   },
   speechText: { color: "#173B53", fontSize: 14, lineHeight: 19, fontWeight: "900", textAlign: "center" },
   storeFriends: { alignItems: "center" },
-  owlFriend: { fontSize: 36 },
-  personEmoji: { fontSize: 34, marginTop: -8 },
   rememberCard: {
     backgroundColor: "#FFEAA4",
     borderRadius: 18,

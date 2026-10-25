@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import {
+  Alert,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -7,6 +9,9 @@ import {
   View,
 } from "react-native";
 import { playFeedback } from "../utils/soundEffects";
+import { awardModuleBadge } from "./badges";
+import AnimatedLearningSticker from "../components/AnimatedLearningSticker";
+import { AppAppearanceContext } from "../components/CloudBackdrop";
 
 export type MathLessonCategory =
   | "multiplication"
@@ -405,25 +410,97 @@ type Stage = "learn" | "quiz" | "done";
 const renderEmojiSet = (emoji: string, count: number) =>
   Array.from({ length: count }, () => emoji).join(" ");
 
+function FloatingEmoji({ emoji, style }: { emoji: string; style?: object }) {
+  const offset = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(offset, { toValue: -6, duration: 700, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 6, duration: 700, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 0, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [offset]);
+
+  return <Animated.Text style={[style, { transform: [{ translateY: offset }] }]}>{emoji}</Animated.Text>;
+}
+
 export default function GradeThreeMathScreen({
   onBack,
+  completedLessonIds,
+  lessonProgressReady,
+  onCompleteLesson,
+  onRecordMistake,
 }: {
   onBack?: () => void;
+  completedLessonIds: string[];
+  lessonProgressReady: boolean;
+  onCompleteLesson: (lessonId: string) => void;
+  onRecordMistake: (lessonId: string) => void;
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
   const [lessonIdx, setLessonIdx] = useState<number | null>(null);
   const [stage, setStage] = useState<Stage>("learn");
   const [qIdx, setQIdx] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState(0);
+  const [mistakes, setMistakes] = useState(0);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lesson = lessonIdx === null ? null : mathLessons[lessonIdx];
+  const lessonId = lesson ? `grade:3:math:${lesson.id}` : null;
+
+  useEffect(
+    () => () => {
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    },
+    []
+  );
+
+  const isLessonUnlocked = (index: number) =>
+    lessonProgressReady &&
+    (index === 0 ||
+      mathLessons
+        .slice(0, index)
+        .every((item) => completedLessonIds.includes(`grade:3:math:${item.id}`)));
 
   const openLesson = (index: number) => {
+    if (!isLessonUnlocked(index)) return;
     setLessonIdx(index);
     setStage("learn");
     setQIdx(0);
     setPicked(null);
     setScore(0);
+    setMistakes(0);
+  };
+
+  const goNext = (wasWrong = false) => {
+    if (!lesson) return;
+    const nextMistakes = mistakes + (wasWrong ? 1 : 0);
+    setMistakes(nextMistakes);
+    if (qIdx + 1 < lesson.problems.length) {
+      setQIdx(qIdx + 1);
+      setPicked(null);
+      return;
+    }
+    setStage("done");
+    if (nextMistakes === 0 && lessonId) {
+      onCompleteLesson(lessonId);
+      void awardModuleBadge({
+        moduleId: lessonId,
+        title: lesson.title,
+        summary: lesson.learn.join(" "),
+        resultLabel: `Perfect score · ${lesson.problems.length}/${lesson.problems.length} correct`,
+      }).catch((error: unknown) => {
+        Alert.alert(
+          "Badge not saved",
+          error instanceof Error ? error.message : "Check device storage and try again."
+        );
+      });
+    }
   };
 
   const choose = (choice: string) => {
@@ -434,16 +511,11 @@ export default function GradeThreeMathScreen({
       setScore((currentScore) => currentScore + 1);
     } else {
       playFeedback("error");
-    }
-  };
-
-  const goNext = () => {
-    if (!lesson) return;
-    if (qIdx + 1 < lesson.problems.length) {
-      setQIdx(qIdx + 1);
-      setPicked(null);
-    } else {
-      setStage("done");
+      if (lessonId) onRecordMistake(lessonId);
+      advanceTimer.current = setTimeout(() => {
+        advanceTimer.current = null;
+        goNext(true);
+      }, 900);
     }
   };
 
@@ -454,8 +526,7 @@ export default function GradeThreeMathScreen({
     }
 
     if (stage === "done") {
-      setStage("quiz");
-      setPicked(null);
+      setLessonIdx(null);
       return;
     }
 
@@ -483,13 +554,18 @@ export default function GradeThreeMathScreen({
         ) : null}
 
         <View style={styles.header}>
+          <AnimatedLearningSticker variant="coin" size={64} />
           <Text style={styles.h1}>Mathematics</Text>
           <Text style={styles.muted}>Choose a lesson to begin!</Text>
         </View>
 
-        {mathLessons.map((item, index) => (
+        {mathLessons.map((item, index) => {
+          const unlocked = isLessonUnlocked(index);
+          const complete = completedLessonIds.includes(`grade:3:math:${item.id}`);
+          return (
           <Pressable
             key={item.id}
+            disabled={!unlocked}
             onPress={() => openLesson(index)}
             accessibilityRole="button"
             style={({ pressed }) => [styles.card, styles.row, pressed && styles.pressed]}
@@ -499,9 +575,12 @@ export default function GradeThreeMathScreen({
             </View>
             <Text style={styles.lessonEmoji}>{item.emoji}</Text>
             <Text style={[styles.cardTitle, { flex: 1 }]}>{item.title}</Text>
-            <Text style={styles.linkText}>Start</Text>
+            <Text style={styles.linkText}>
+              {complete ? "Replay" : unlocked ? "Start" : "Locked"}
+            </Text>
           </Pressable>
-        ))}
+          );
+        })}
       </ScrollView>
     );
   }
@@ -518,7 +597,7 @@ export default function GradeThreeMathScreen({
         </Pressable>
 
         <View style={styles.lessonHeader}>
-          <Text style={styles.lessonHeaderEmoji}>{lesson.emoji}</Text>
+          <AnimatedLearningSticker variant="coin" size={58} />
           <Text style={styles.h1}>{lesson.title}</Text>
         </View>
         <Text style={[styles.muted, { marginBottom: 12 }]}>What you will learn</Text>
@@ -613,17 +692,32 @@ export default function GradeThreeMathScreen({
 
         {answered ? (
           <>
-            <Text style={[styles.feedback, { color: gotItRight ? GREEN : RED }]}>
+            <Text
+              style={[
+                styles.feedback,
+                {
+                  color: darkMode
+                    ? gotItRight
+                      ? "#A7E2BC"
+                      : "#FFC0B5"
+                    : gotItRight
+                      ? GREEN
+                      : RED,
+                },
+              ]}
+            >
               {gotItRight ? "Correct! Great job." : `Not quite. The answer is ${problem.answer}.`}
             </Text>
 
-            <Pressable
-              onPress={goNext}
-              accessibilityRole="button"
-              style={styles.primaryButton}
-            >
-              <Text style={styles.primaryText}>{isLast ? "Finish" : "Next"}</Text>
-            </Pressable>
+            {gotItRight ? (
+              <Pressable
+                onPress={() => goNext()}
+                accessibilityRole="button"
+                style={styles.primaryButton}
+              >
+                <Text style={styles.primaryText}>{isLast ? "Finish" : "Next"}</Text>
+              </Pressable>
+            ) : null}
           </>
         ) : (
           <Pressable
@@ -639,14 +733,18 @@ export default function GradeThreeMathScreen({
   }
 
   const total = lesson.problems.length;
-  const hasNextLesson = lessonIdx + 1 < mathLessons.length;
+  const passedPerfectly = mistakes === 0;
+  const hasNextLesson = passedPerfectly && lessonIdx + 1 < mathLessons.length;
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <View style={[styles.card, { alignItems: "center", paddingVertical: 28 }]}>
-        <Text style={styles.h1}>Lesson complete!</Text>
+        <Text style={styles.h1}>
+          {passedPerfectly ? "Lesson complete!" : "Try again for a perfect score"}
+        </Text>
         <Text style={[styles.body, { marginTop: 8 }]}>
-          You got {score} of {total} correct in {lesson.title}.
+          You got {score} of {total} correct in {lesson.title}, with {mistakes}{" "}
+          {mistakes === 1 ? "mistake" : "mistakes"}.
         </Text>
       </View>
 
