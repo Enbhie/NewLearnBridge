@@ -2,6 +2,10 @@ import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { playFeedback } from "../utils/soundEffects";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import AnimatedLearningSticker, {
+  learningStickerVariantForIndex,
+} from "./AnimatedLearningSticker";
+import StorybookPicture from "./StorybookPicture";
 
 export type GradeTwoMiniGameId =
   | "story-squeeze"
@@ -261,7 +265,10 @@ function MiniGameChoice({
   return (
     <View style={styles.container}>
       <View style={styles.gameCard}>
-        <Text style={styles.gameEmoji}>{info.emoji}</Text>
+        <AnimatedLearningSticker
+          variant={learningStickerVariantForIndex(round - 1)}
+          size={58}
+        />
         <Text style={styles.title}>{info.title}</Text>
         <Text style={styles.difficulty}>Difficulty: {difficulty}</Text>
         <Text style={styles.roundLabel}>
@@ -284,9 +291,12 @@ function MiniGameChoice({
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.choiceText}>
-                  {sequence.includes(event) ? `✓ ${event}` : event}
-                </Text>
+                <View style={styles.choiceContent}>
+                  <StorybookPicture label={event} size={30} />
+                  <Text style={styles.choiceText}>
+                    {sequence.includes(event) ? `✓ ${event}` : event}
+                  </Text>
+                </View>
               </Pressable>
             ))}
             <Text style={styles.subtleText}>
@@ -304,11 +314,18 @@ function MiniGameChoice({
               {activity.categories.map((category) => (
                 <Pressable
                   accessibilityRole="button"
+                  celebrateOnPress
                   key={category}
                   onPress={() => selectAnswer(category)}
                   style={({ pressed }) => [styles.categoryButton, pressed && styles.pressed]}
                 >
-                  <Text style={styles.choiceText}>{category}</Text>
+                  <View style={styles.choiceContent}>
+                    <StorybookPicture
+                      label={category}
+                      size={28}
+                    />
+                    <Text style={styles.choiceText}>{category}</Text>
+                  </View>
                 </Pressable>
               ))}
             </View>
@@ -319,11 +336,18 @@ function MiniGameChoice({
             {activity.options.map((option) => (
               <Pressable
                 accessibilityRole="button"
+                celebrateOnPress
                 key={option}
                 onPress={() => selectAnswer(option)}
                 style={({ pressed }) => [styles.choiceButton, pressed && styles.pressed]}
               >
-                <Text style={styles.choiceText}>{option}</Text>
+                <View style={styles.choiceContent}>
+                  <StorybookPicture
+                    label={option}
+                    size={30}
+                  />
+                  <Text style={styles.choiceText}>{option}</Text>
+                </View>
               </Pressable>
             ))}
           </>
@@ -338,11 +362,18 @@ function MiniGameChoice({
               {activity.coins.map((coin) => (
                 <Pressable
                   accessibilityRole="button"
+                  celebrateOnPress
                   key={coin}
                   onPress={() => addCoin(coin)}
                   style={({ pressed }) => [styles.coinButton, pressed && styles.pressed]}
                 >
-                  <Text style={styles.choiceText}>{coin <= 20 ? `₱${coin} coin` : `₱${coin} bill`}</Text>
+                  <View style={styles.choiceContent}>
+                    <StorybookPicture
+                      label={coin <= 20 ? `₱${coin} coin` : `₱${coin} bill`}
+                      size={30}
+                    />
+                    <Text style={styles.choiceText}>{coin <= 20 ? `₱${coin} coin` : `₱${coin} bill`}</Text>
+                  </View>
                 </Pressable>
               ))}
             </View>
@@ -383,7 +414,12 @@ function MiniGameChoice({
                       pressed && styles.pressed,
                     ]}
                   >
-                    <Text style={styles.flower}>{planted ? "🌼" : ""}</Text>
+                    {planted ? (
+                      <AnimatedLearningSticker
+                        variant={learningStickerVariantForIndex(index)}
+                        size={28}
+                      />
+                    ) : null}
                   </Pressable>
                 );
               })}
@@ -448,7 +484,10 @@ export function PlaceValueRocketGame({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>🚀 Place Value Rocket</Text>
+      <View style={styles.rocketTitle}>
+        <AnimatedLearningSticker variant="coin" size={48} />
+        <Text style={styles.title}>Place Value Rocket</Text>
+      </View>
       <Text style={styles.targetHeading}>Fuel the rocket to make:</Text>
       <Text style={styles.targetNumber}>{targetNumber}</Text>
 
@@ -548,7 +587,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     opacity: 0.8,
   },
-  gameEmoji: { fontSize: 40, marginBottom: 10 },
+  rocketTitle: { alignItems: "center", gap: 8 },
   difficulty: {
     color: "#6b7280",
     fontSize: 12,
@@ -603,6 +642,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     width: "100%",
   },
+  choiceContent: { alignItems: "center", flexDirection: "row", gap: 10 },
   selectedCard: { backgroundColor: "#D5F5EB", borderColor: "#66CBB1" },
   choiceText: { color: "#173B53", fontSize: 15, fontWeight: "700", textAlign: "center" },
   coinButton: {

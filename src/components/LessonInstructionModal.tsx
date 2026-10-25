@@ -1,6 +1,9 @@
 import { useContext } from "react";
 import { Modal, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AnimatedLearningSticker, {
+  type LearningStickerVariant,
+} from "./AnimatedLearningSticker";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
 import { AppAppearanceContext } from "./CloudBackdrop";
 
@@ -8,7 +11,8 @@ type Props = {
   visible: boolean;
   title: string;
   instruction: string;
-  emoji: string;
+  emoji?: string;
+  stickerVariant?: LearningStickerVariant;
   onStart: () => void;
   onRequestClose?: () => void;
 };
@@ -18,6 +22,7 @@ export default function LessonInstructionModal({
   title,
   instruction,
   emoji,
+  stickerVariant,
   onStart,
   onRequestClose,
 }: Props) {
@@ -32,7 +37,11 @@ export default function LessonInstructionModal({
     >
       <SafeAreaView style={styles.backdrop}>
         <View style={[styles.card, darkMode && styles.darkCard]}>
-          <Text style={styles.emoji}>{emoji}</Text>
+          {stickerVariant ? (
+            <AnimatedLearningSticker variant={stickerVariant} size={72} />
+          ) : (
+            <Text style={styles.emoji}>{emoji ?? ""}</Text>
+          )}
           <Text style={[styles.title, darkMode && styles.darkText]}>{title}</Text>
           <Text style={[styles.instruction, darkMode && styles.darkMutedText]}>
             {instruction}

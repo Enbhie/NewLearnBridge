@@ -167,6 +167,7 @@ export default function PlantStoryGame({ onBack, onFinish }: Props) {
                 return (
                   <Pressable
                     accessibilityRole="button"
+                    celebrateOnPress
                     accessibilityState={{ selected }}
                     key={choice.id}
                     onPress={() => choosePlant(choice)}

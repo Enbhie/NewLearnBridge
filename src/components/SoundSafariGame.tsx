@@ -3,6 +3,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import StorybookPicture from "./StorybookPicture";
 import { playFeedback } from "../utils/soundEffects";
 import { AppAppearanceContext } from "./CloudBackdrop";
 
@@ -186,8 +187,12 @@ export default function SoundSafariGame({
                   darkMode && checked !== null && isPicked && !isTarget && styles.darkTileWrong,
                 ]}
               >
-                <Text style={styles.tileEmoji}>{tile.emoji}</Text>
-                {checked !== null ? <Text style={[styles.tileWord, darkMode && styles.darkText]}>{tile.word}</Text> : null}
+                <StorybookPicture
+                  label={tile.word}
+                  emoji={tile.emoji}
+                  size={48}
+                />
+                <Text style={[styles.tileWord, darkMode && styles.darkText]}>{tile.word}</Text>
               </Pressable>
             );
           })}
@@ -239,7 +244,6 @@ const styles = StyleSheet.create({
   tilePicked: { borderColor: "#F3C451", backgroundColor: "#FFF0AA" },
   tileCorrect: { borderColor: "#66CBB1", backgroundColor: "#D5F5EB" },
   tileWrong: { borderColor: "#E53E3E", backgroundColor: "#FFE0DC" },
-  tileEmoji: { fontSize: 40 },
   tileWord: { color: "#173B53", fontSize: 12, fontWeight: "800", marginTop: 2 },
   primaryBtn: { alignItems: "center", justifyContent: "center", minHeight: 56, borderRadius: 16, backgroundColor: "#F17D65", paddingHorizontal: 16, marginTop: 8, alignSelf: "stretch" },
   primaryBtnText: { color: "#FFFDF5", fontSize: 16, fontWeight: "800" },

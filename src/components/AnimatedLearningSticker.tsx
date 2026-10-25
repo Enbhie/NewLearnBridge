@@ -13,8 +13,17 @@ const stickerColors = {
   coin: { backgroundColor: "#FFF0AA", borderColor: "#F3C451" },
 };
 
+export type LearningStickerVariant = keyof typeof stickers;
+const stickerVariants: LearningStickerVariant[] = ["owl", "plant", "coin"];
+
+export function learningStickerVariantForIndex(
+  index: number
+): LearningStickerVariant {
+  return stickerVariants[index % stickerVariants.length];
+}
+
 type Props = {
-  variant: keyof typeof stickers;
+  variant: LearningStickerVariant;
   size?: number;
   style?: StyleProp<ImageStyle>;
 };
@@ -27,6 +36,7 @@ export default function AnimatedLearningSticker({
   return (
     <Image
       accessibilityLabel={`${variant} learning animation`}
+      autoplay
       contentFit="contain"
       source={stickers[variant]}
       style={[

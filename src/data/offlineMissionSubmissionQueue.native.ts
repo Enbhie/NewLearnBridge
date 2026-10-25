@@ -1,7 +1,8 @@
 import { Directory, File, Paths } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
+import * as Network from "expo-network";
 import { auth } from "../firebase";
-import { checkInternetConnectivity } from "../utils/internetConnectivity";
+import { isDefinitelyOffline } from "../utils/internetConnectivity";
 import { submitMissionPhotoForReview } from "./missionSubmissions";
 
 export type MissionSubmissionStatus =
@@ -9,6 +10,11 @@ export type MissionSubmissionStatus =
   | "pending_upload"
   | "uploading"
   | "submitted_successfully"
+  | "uploaded_to_cloudinary"
+  | "awaiting_parent_confirmation"
+  | "waiting_for_parent_review"
+  | "parent_approved"
+  | "parent_requested_retry"
   | "upload_failed";
 
 export type OfflineMissionSubmission = {
@@ -20,9 +26,26 @@ export type OfflineMissionSubmission = {
   submittedAt: string;
   status: MissionSubmissionStatus;
   errorMessage: string | null;
+  progressPercent?: number;
+  storageUploaded?: boolean;
+  storageProvider: "firebase" | "cloudinary";
+  cloudinaryPublicId?: string;
+  cloudinarySecureUrl?: string;
+  databaseSubmissionId?: string;
 };
 
-type SubmissionRow = OfflineMissionSubmission;
+type SubmissionRow = Omit<
+  OfflineMissionSubmission,
+  | "storageUploaded"
+  | "cloudinaryPublicId"
+  | "cloudinarySecureUrl"
+  | "databaseSubmissionId"
+> & {
+  storageUploaded: number;
+  cloudinaryPublicId: string | null;
+  cloudinarySecureUrl: string | null;
+  databaseSubmissionId: string | null;
+};
 
 const DATABASE_NAME = "learnbridge-mission-submissions.db";
 const PHOTO_DIRECTORY = new Directory(Paths.document, "mission-submissions");
@@ -50,11 +73,44 @@ function openDatabase(): Promise<SQLite.SQLiteDatabase> {
           content_type TEXT NOT NULL,
           submitted_at TEXT NOT NULL,
           status TEXT NOT NULL,
-          error_message TEXT
+          error_message TEXT,
+          storage_uploaded INTEGER NOT NULL DEFAULT 0,
+          storage_provider TEXT NOT NULL DEFAULT 'firebase',
+          cloudinary_public_id TEXT,
+          cloudinary_secure_url TEXT,
+          database_submission_id TEXT
         );
         CREATE INDEX IF NOT EXISTS mission_submissions_user_date
           ON mission_submissions (user_id, submitted_at DESC);
       `);
+      const columns = await database.getAllAsync<{ name: string }>(
+        "PRAGMA table_info(mission_submissions)"
+      );
+      if (!columns.some((column) => column.name === "storage_uploaded")) {
+        await database.execAsync(
+          "ALTER TABLE mission_submissions ADD COLUMN storage_uploaded INTEGER NOT NULL DEFAULT -1"
+        );
+      }
+      if (!columns.some((column) => column.name === "storage_provider")) {
+        await database.execAsync(
+          "ALTER TABLE mission_submissions ADD COLUMN storage_provider TEXT NOT NULL DEFAULT 'firebase'"
+        );
+      }
+      if (!columns.some((column) => column.name === "cloudinary_public_id")) {
+        await database.execAsync(
+          "ALTER TABLE mission_submissions ADD COLUMN cloudinary_public_id TEXT"
+        );
+      }
+      if (!columns.some((column) => column.name === "cloudinary_secure_url")) {
+        await database.execAsync(
+          "ALTER TABLE mission_submissions ADD COLUMN cloudinary_secure_url TEXT"
+        );
+      }
+      if (!columns.some((column) => column.name === "database_submission_id")) {
+        await database.execAsync(
+          "ALTER TABLE mission_submissions ADD COLUMN database_submission_id TEXT"
+        );
+      }
       await database.runAsync(
         `UPDATE mission_submissions
          SET status = 'pending_upload'
@@ -67,6 +123,22 @@ function openDatabase(): Promise<SQLite.SQLiteDatabase> {
     });
   }
   return databasePromise;
+}
+
+function mapSubmissionRow(row: SubmissionRow): OfflineMissionSubmission {
+  return {
+    ...row,
+    storageUploaded:
+      row.storageUploaded === 1
+        ? true
+        : row.storageUploaded === 0
+          ? false
+          : undefined,
+    storageProvider: row.storageProvider,
+    cloudinaryPublicId: row.cloudinaryPublicId ?? undefined,
+    cloudinarySecureUrl: row.cloudinarySecureUrl ?? undefined,
+    databaseSubmissionId: row.databaseSubmissionId ?? undefined,
+  };
 }
 
 function createSubmissionId(): string {
@@ -125,13 +197,14 @@ export async function saveMissionPhotoSubmission(
     submittedAt: new Date().toISOString(),
     status: "pending_upload",
     errorMessage: null,
+    storageProvider: "cloudinary",
   };
 
   try {
     await database.runAsync(
       `INSERT INTO mission_submissions
-        (id, user_id, mission_id, file_uri, content_type, submitted_at, status, error_message)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+        (id, user_id, mission_id, file_uri, content_type, submitted_at, status, error_message, storage_uploaded, storage_provider)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, 'cloudinary')`,
       submission.id,
       submission.userId,
       submission.missionId,
@@ -161,20 +234,89 @@ export async function getMissionSubmissions(
        content_type AS contentType,
        submitted_at AS submittedAt,
        status,
-       error_message AS errorMessage
+       error_message AS errorMessage,
+       storage_uploaded AS storageUploaded,
+       storage_provider AS storageProvider,
+       cloudinary_public_id AS cloudinaryPublicId,
+       cloudinary_secure_url AS cloudinarySecureUrl,
+       database_submission_id AS databaseSubmissionId
      FROM mission_submissions
      WHERE user_id = ?
      ORDER BY submitted_at DESC`,
     userId
   );
-  return rows;
+  return rows.map(mapSubmissionRow);
+}
+
+export async function markMissionSubmissionReviewed(
+  submissionId: string,
+  status: "approved" | "needs_revision"
+): Promise<void> {
+  const database = await openDatabase();
+  await database.runAsync(
+    "UPDATE mission_submissions SET status = ? WHERE id = ?",
+    status === "approved" ? "parent_approved" : "parent_requested_retry",
+    submissionId
+  );
+  const userId = auth?.currentUser?.uid;
+  if (userId) {
+    await database.runAsync(
+      `UPDATE mission_submissions
+       SET status = 'pending_upload', error_message = NULL
+       WHERE user_id = ? AND status = 'waiting_for_parent_review'`,
+      userId
+    );
+  }
 }
 
 async function syncUserSubmissions(
   userId: string,
   onStatusChange: StatusChangeListener
 ): Promise<void> {
-  if (!(await checkInternetConnectivity())) return;
+  const networkState = await Network.getNetworkStateAsync();
+  if (isDefinitelyOffline(networkState)) {
+    const database = await openDatabase();
+    const pending = await database.getAllAsync<SubmissionRow>(
+      `SELECT
+         id,
+         user_id AS userId,
+         mission_id AS missionId,
+         file_uri AS fileUri,
+         content_type AS contentType,
+         submitted_at AS submittedAt,
+         status,
+         error_message AS errorMessage,
+         storage_uploaded AS storageUploaded,
+         storage_provider AS storageProvider,
+         cloudinary_public_id AS cloudinaryPublicId,
+         cloudinary_secure_url AS cloudinarySecureUrl,
+         database_submission_id AS databaseSubmissionId
+       FROM mission_submissions
+       WHERE user_id = ?
+         AND status IN ('saved_offline', 'pending_upload', 'upload_failed')
+       ORDER BY submitted_at ASC`,
+      userId
+    );
+    for (const row of pending) {
+      const submission = mapSubmissionRow(row);
+      if (auth?.currentUser?.uid !== userId) return;
+      if (submission.status !== "pending_upload") {
+        await database.runAsync(
+          `UPDATE mission_submissions
+           SET status = 'pending_upload', error_message = NULL
+           WHERE id = ? AND user_id = ?`,
+          submission.id,
+          userId
+        );
+      }
+      onStatusChange({
+        ...submission,
+        status: "pending_upload",
+        errorMessage: null,
+      });
+    }
+    return;
+  }
 
   const database = await openDatabase();
   const pending = await database.getAllAsync<SubmissionRow>(
@@ -186,13 +328,22 @@ async function syncUserSubmissions(
        content_type AS contentType,
        submitted_at AS submittedAt,
        status,
-       error_message AS errorMessage
+       error_message AS errorMessage,
+       storage_uploaded AS storageUploaded,
+       storage_provider AS storageProvider,
+       cloudinary_public_id AS cloudinaryPublicId,
+       cloudinary_secure_url AS cloudinarySecureUrl,
+       database_submission_id AS databaseSubmissionId
      FROM mission_submissions
      WHERE user_id = ?
-       AND status IN ('saved_offline', 'pending_upload', 'upload_failed')
+       AND status IN (
+         'saved_offline',
+         'pending_upload',
+         'upload_failed'
+       )
      ORDER BY submitted_at ASC`,
     userId
-  );
+  ).then((rows) => rows.map(mapSubmissionRow));
 
   for (const submission of pending) {
     if (auth?.currentUser?.uid !== userId) return;
@@ -206,19 +357,71 @@ async function syncUserSubmissions(
     );
     onStatusChange({ ...submission, status: "uploading", errorMessage: null });
 
+    let storageUploaded = submission.storageUploaded;
+    let cloudinaryPublicId = submission.cloudinaryPublicId;
+    let cloudinarySecureUrl = submission.cloudinarySecureUrl;
+    let databaseSubmissionId = submission.databaseSubmissionId;
     try {
-      await submitMissionPhotoForReview(
+      const result = await submitMissionPhotoForReview(
         submission.missionId,
         submission.fileUri,
         submission.contentType,
         submission.id,
         submission.userId,
-        submission.submittedAt
+        submission.submittedAt,
+        {
+          storageUploaded,
+          storageProvider: submission.storageProvider,
+          cloudinaryPublicId,
+          cloudinarySecureUrl,
+          databaseSubmissionId,
+          onUploadStarted: async () => {
+            await database.runAsync(
+              "UPDATE mission_submissions SET storage_uploaded = -1 WHERE id = ? AND user_id = ?",
+              submission.id,
+              userId
+            );
+            storageUploaded = undefined;
+          },
+          onUploadProgress: (progressPercent) => {
+            onStatusChange({
+              ...submission,
+              status: "uploading",
+              errorMessage: null,
+              progressPercent,
+            });
+          },
+          onPhotoUploaded: async (uploadedPhoto) => {
+            await database.runAsync(
+              `UPDATE mission_submissions
+               SET storage_uploaded = 1,
+                   cloudinary_public_id = COALESCE(?, cloudinary_public_id),
+                   cloudinary_secure_url = COALESCE(?, cloudinary_secure_url),
+                   database_submission_id = COALESCE(?, database_submission_id)
+               WHERE id = ? AND user_id = ?`,
+              uploadedPhoto?.publicId ?? null,
+              uploadedPhoto?.secureUrl ?? null,
+              uploadedPhoto?.databaseSubmissionId ?? null,
+              submission.id,
+              userId
+            );
+            storageUploaded = true;
+            cloudinaryPublicId = uploadedPhoto?.publicId ?? cloudinaryPublicId;
+            cloudinarySecureUrl = uploadedPhoto?.secureUrl ?? cloudinarySecureUrl;
+            databaseSubmissionId =
+              uploadedPhoto?.databaseSubmissionId ?? databaseSubmissionId;
+          },
+        }
       );
+      const finalStatus =
+        result.status === "awaiting_parent_confirmation"
+          ? "awaiting_parent_confirmation"
+          : "submitted_successfully";
       await database.runAsync(
         `UPDATE mission_submissions
-         SET status = 'submitted_successfully', error_message = NULL
+         SET status = ?, error_message = NULL
          WHERE id = ? AND user_id = ?`,
+        finalStatus,
         submission.id,
         userId
       );
@@ -226,16 +429,22 @@ async function syncUserSubmissions(
       if (localFile.exists) localFile.delete();
       onStatusChange({
         ...submission,
-        status: "submitted_successfully",
+        status: finalStatus,
         errorMessage: null,
+        progressPercent: 100,
+        cloudinaryPublicId,
+        cloudinarySecureUrl,
+        databaseSubmissionId,
       });
+      return;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "The submission could not be uploaded.";
-      const waitingForReview =
-        errorMessage.includes("A mission is already waiting for your parent");
+      const waitingForReview = errorMessage.includes(
+        "A mission is already waiting for your parent"
+      );
       const status: MissionSubmissionStatus = waitingForReview
-        ? "pending_upload"
+        ? "waiting_for_parent_review"
         : "upload_failed";
       await database.runAsync(
         `UPDATE mission_submissions
@@ -246,7 +455,16 @@ async function syncUserSubmissions(
         submission.id,
         userId
       );
-      onStatusChange({ ...submission, status, errorMessage });
+      onStatusChange({
+        ...submission,
+        status,
+        errorMessage,
+        storageUploaded,
+        cloudinaryPublicId,
+        cloudinarySecureUrl,
+        databaseSubmissionId,
+      });
+      if (waitingForReview) return;
     }
   }
 }

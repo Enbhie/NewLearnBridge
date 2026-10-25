@@ -1,0 +1,47 @@
+{
+  "rules": {
+    "missionSubmissions": {
+      "$uid": {
+        "$submissionId": {
+          "secureUrl": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.isString() && newData.val().matches(/^https:\\/\\/res\\.cloudinary\\.com\\/[^/]+\\/image\\/upload\\/.*$/)"
+          }
+        }
+      }
+    },
+    "submissions": {
+      "$uid": {
+        "$submissionId": {
+          ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
+          ".validate": "data.exists() ? newData.hasChildren(['missionId', 'imageUrl', 'status', 'createdAt']) : newData.hasChildren(['missionId', 'missionTitle', 'imageUrl', 'status', 'createdAt'])",
+          ".read": "auth != null && auth.uid === $uid",
+          "missionId": {
+            ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || data.val() === newData.val())",
+            ".validate": "newData.isString() && newData.val().matches(/^(K-[0-9]+|G[1-3]-[0-9]+)$/)"
+          },
+          "missionTitle": {
+            ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || data.val() === newData.val())",
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120"
+          },
+          "imageUrl": {
+            ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || data.val() === newData.val())",
+            ".validate": "newData.isString() && newData.val().matches(/^https:\\/\\/res\\.cloudinary\\.com\\/[^/]+\\/image\\/upload\\/.*$/)"
+          },
+          "status": {
+            ".write": "auth != null && auth.uid === $uid && auth.token.email_verified === true && ((!data.exists() && newData.val() === 'pending') || (data.val() === 'pending' && (newData.val() === 'approved' || newData.val() === 'rejected')) || data.val() === newData.val())",
+            ".validate": "newData.val() === 'pending' || newData.val() === 'approved' || newData.val() === 'rejected'"
+          },
+          "createdAt": {
+            ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || data.val() === newData.val())",
+            ".validate": "newData.isNumber() && newData.val() > 0"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    }
+  }
+}

@@ -351,7 +351,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { awardModuleBadge } from "../data/badges";
 import type { CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
-import AnimatedLearningSticker from "./AnimatedLearningSticker";
+import AnimatedLearningSticker, {
+  learningStickerVariantForIndex,
+} from "./AnimatedLearningSticker";
+import StorybookPicture from "./StorybookPicture";
 import LessonInstructionModal from "./LessonInstructionModal";
 import {
   HealthyRoutineGame,
@@ -520,6 +523,7 @@ export default function KindergartenLessonsScreen({
     game: Game;
     unitId: string;
     level: number;
+    stickerVariant: ReturnType<typeof learningStickerVariantForIndex>;
   } | null>(null);
 
   const activeUnit =
@@ -605,7 +609,12 @@ export default function KindergartenLessonsScreen({
       return (
         <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
           <View style={styles.centerPanel}>
-            <Text style={styles.bigEmoji}>{game.emoji}</Text>
+            <AnimatedLearningSticker
+              variant={learningStickerVariantForIndex(
+                activeUnit.games.findIndex((unitGame) => unitGame.id === game.id)
+              )}
+              size={64}
+            />
             <Text style={styles.heroTitle}>{game.title}</Text>
             <Text style={styles.heroSub}>This game is coming soon!</Text>
             <Pressable onPress={exit} style={styles.backBtn}>
@@ -626,19 +635,27 @@ export default function KindergartenLessonsScreen({
             <Text style={styles.backBtnText}>Back</Text>
           </Pressable>
           <View style={[styles.hero, darkMode && styles.darkCard]}>
-            <Text style={styles.bigEmoji}>{activeUnit.emoji}</Text>
+            <AnimatedLearningSticker
+              variant={learningStickerVariantForIndex(
+                kindergartenUnits.indexOf(activeUnit)
+              )}
+              size={78}
+            />
             <Text style={[styles.heroTitle, darkMode && styles.darkText]}>
               Unit {activeUnit.number}: {activeUnit.title}
             </Text>
             <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>{activeUnit.focus}</Text>
-            <Text style={[styles.starsText, darkMode && styles.darkText]}>
-              ⭐ {unitStars(activeUnit)} / {activeUnit.games.length * LEVELS.length}
-            </Text>
+            <View style={styles.unitProgress}>
+              <AnimatedLearningSticker variant="coin" size={26} />
+              <Text style={[styles.starsText, darkMode && styles.darkText]}>
+                {unitStars(activeUnit)} / {activeUnit.games.length * LEVELS.length}
+              </Text>
+            </View>
           </View>
 
           {activeUnit.games.map((game) => (
             <View key={game.id} style={[styles.card, darkMode && styles.darkCard]}>
-              <Text style={styles.cardEmoji}>{game.emoji}</Text>
+              <StorybookPicture label={game.title} size={62} />
               <Text style={[styles.cardTitle, darkMode && styles.darkText]}>{game.title}</Text>
               <Text style={[styles.cardBlurb, darkMode && styles.darkMutedText]}>{game.blurb}</Text>
               {!game.playable ? <Text style={styles.soon}>COMING SOON</Text> : null}
@@ -652,14 +669,24 @@ export default function KindergartenLessonsScreen({
                     <Pressable
                       key={level}
                       disabled={!unlocked}
-                      onPress={() => setPendingGame({ game, unitId: activeUnit.id, level })}
+                      onPress={() =>
+                        setPendingGame({
+                          game,
+                          unitId: activeUnit.id,
+                          level,
+                          stickerVariant: learningStickerVariantForIndex(level - 1),
+                        })
+                      }
                       style={[
                         styles.levelBtn,
                         done && styles.levelBtnDone,
                         !unlocked && styles.levelBtnLocked,
                       ]}
                     >
-                      <Text style={styles.levelStar}>{done ? "⭐" : unlocked ? "▶" : "🔒"}</Text>
+                      <StorybookPicture
+                        label={LEVEL_LABELS[level - 1]}
+                        size={30}
+                      />
                       <Text style={[styles.levelText, darkMode && styles.darkText]}>{LEVEL_LABELS[level - 1]}</Text>
                     </Pressable>
                   );
@@ -669,10 +696,11 @@ export default function KindergartenLessonsScreen({
           ))}
 
           <View style={[styles.badgeCard, darkMode && styles.darkCard]}>
+            <AnimatedLearningSticker variant="coin" size={38} />
             <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
               {unitStars(activeUnit) === activeUnit.games.length * LEVELS.length
-                ? "🏅 Unit badge earned!"
-                : "🏅 Finish every level to earn the unit badge"}
+                ? "Unit badge earned!"
+                : "Finish every level to earn the unit badge"}
             </Text>
           </View>
         </ScrollView>
@@ -680,7 +708,7 @@ export default function KindergartenLessonsScreen({
           visible={pendingGame !== null}
           title={pendingGame?.game.title ?? ""}
           instruction={pendingGame?.game.blurb ?? ""}
-          emoji={pendingGame?.game.emoji ?? ""}
+          stickerVariant={pendingGame?.stickerVariant ?? "owl"}
           onStart={() => {
             if (!pendingGame) return;
             setView({
@@ -722,14 +750,14 @@ export default function KindergartenLessonsScreen({
               onPress={() => setView({ kind: "unit", unitId: unit.id })}
               style={[styles.card, darkMode && styles.darkCard, !unlocked && { opacity: 0.6 }]}
             >
-              <Text style={styles.cardEmoji}>{unit.emoji}</Text>
+              <StorybookPicture label={unit.title} size={62} />
               <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
                 Unit {unit.number}: {unit.title}
               </Text>
               <Text style={[styles.meta, darkMode && styles.darkMutedText]}>
-                {unit.games.length} {unit.games.length === 1 ? "game" : "games"} · ⭐{" "}
+                {unit.games.length} {unit.games.length === 1 ? "game" : "games"} ·{" "}
                 {unitStars(unit)}/{unit.games.length * LEVELS.length} ·{" "}
-                {unlocked ? "Open →" : "🔒 Locked"}
+                {unlocked ? "Open" : "Locked"}
               </Text>
             </Pressable>
           );
@@ -813,7 +841,10 @@ function MarketCountGame({
     return (
       <SafeAreaView style={[styles.page, darkMode && styles.darkScreen]}>
         <View style={styles.centerPanel}>
-          <Text style={styles.bigEmoji}>{passed ? "🌟" : "💪"}</Text>
+          <AnimatedLearningSticker
+            variant={passed ? "coin" : "owl"}
+            size={66}
+          />
           <Text style={[styles.heroTitle, darkMode && styles.darkText]}>{passed ? "Great job!" : "Try again!"}</Text>
           <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>
             You got {score} of {ROUNDS} right, with {mistakes} {mistakes === 1 ? "mistake" : "mistakes"}.
@@ -922,6 +953,7 @@ const styles = StyleSheet.create({
   heroTitle: { color: "#173B53", fontSize: 24, fontWeight: "900", textAlign: "center" },
   heroSub: { color: "#36566A", fontSize: 15, lineHeight: 22, textAlign: "center", marginTop: 4 },
   starsText: { color: "#173B53", fontSize: 16, fontWeight: "800", marginTop: 8 },
+  unitProgress: { alignItems: "center", flexDirection: "row", gap: 8 },
   card: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
@@ -948,7 +980,6 @@ const styles = StyleSheet.create({
   },
   levelBtnDone: { backgroundColor: "#D5F5EB", borderColor: "#66CBB1" },
   levelBtnLocked: { backgroundColor: "#E2E8E7", borderColor: "#B9C6C4", opacity: 0.8 },
-  levelStar: { fontSize: 20 },
   levelText: { color: "#173B53", fontSize: 12, fontWeight: "800", marginTop: 2 },
   badgeCard: {
     alignItems: "center",

@@ -17,9 +17,12 @@ import {
 } from "../data/gradeTwoQuizBanks";
 import type { CategoryId } from "../data/learningContent";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import AnimatedLearningSticker, {
+  learningStickerVariantForIndex,
+} from "./AnimatedLearningSticker";
+import StorybookPicture from "./StorybookPicture";
 import { AppAppearanceContext } from "./CloudBackdrop";
 import LessonInstructionModal from "./LessonInstructionModal";
-import AnimatedLearningSticker from "./AnimatedLearningSticker";
 import { playFeedback } from "../utils/soundEffects";
 import GradeTwoMiniGame, {
   gradeTwoMiniGameInfo,
@@ -265,7 +268,7 @@ function LessonQuestionChallenge({
     playFeedback(isCorrect ? "success" : "error");
     if (isCorrect) {
       setAnsweredCorrectly(true);
-      setFeedback("Great job! That's correct! ⭐");
+      setFeedback("Great job! That's correct!");
     } else {
       setAnsweredCorrectly(false);
       setFeedback("Good try! Moving to the next question.");
@@ -304,6 +307,7 @@ function LessonQuestionChallenge({
           return (
             <Pressable
               accessibilityRole="button"
+              celebrateOnPress
               accessibilityState={{ selected, disabled: Boolean(selectedOption) }}
               key={option}
               disabled={Boolean(selectedOption)}
@@ -318,6 +322,7 @@ function LessonQuestionChallenge({
                 pressed && styles.pressed,
               ]}
             >
+              <StorybookPicture label={option} size={34} />
               <Text style={[styles.answerOptionText, darkMode && styles.darkText]}>
                 {option}
               </Text>
@@ -344,7 +349,7 @@ function LessonQuestionChallenge({
           style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
         >
           <Text style={styles.primaryButtonText}>
-            {isLastQuestion ? "FINISH LESSON ⭐" : "NEXT QUESTION →"}
+            {isLastQuestion ? "FINISH LESSON" : "NEXT QUESTION →"}
           </Text>
         </Pressable>
       ) : null}
@@ -546,7 +551,7 @@ export default function GradeTwoLessonsScreen({
             {finished ? (
               <View style={[styles.finishCard, darkMode && styles.darkCard]}>
                 <View style={styles.finishTrophyCircle}>
-                  <Text style={styles.finishEmoji}>🏆</Text>
+                  <AnimatedLearningSticker variant="coin" size={52} />
                 </View>
                 <Text style={[styles.finishTitle, darkMode && styles.darkText]}>
                   {attemptMistakes === 0 ? "Quarter complete!" : "Try again for a perfect score"}
@@ -556,10 +561,13 @@ export default function GradeTwoLessonsScreen({
                     ? `Perfect! You finished ${activeLesson.title} with no mistakes.`
                     : `You made ${attemptMistakes} ${attemptMistakes === 1 ? "mistake" : "mistakes"} in ${activeLesson.title}. This quarter stays locked until you get every question right.`}
                 </Text>
-                <Text style={styles.finishStars}>{attemptMistakes === 0 ? "⭐⭐⭐" : "💪"}</Text>
+                <AnimatedLearningSticker
+                  variant={attemptMistakes === 0 ? "coin" : "owl"}
+                  size={38}
+                />
                 <View style={styles.finishStats}>
                   <View style={[styles.finishStat, darkMode && styles.darkFinishStat]}>
-                    <Text style={styles.finishStatEmoji}>✅</Text>
+                    <AnimatedLearningSticker variant="plant" size={28} />
                     <Text style={[styles.finishStatLabel, darkMode && styles.darkMutedText]}>
                       Questions
                     </Text>
@@ -568,7 +576,7 @@ export default function GradeTwoLessonsScreen({
                     </Text>
                   </View>
                   <View style={[styles.finishStat, darkMode && styles.darkFinishStat]}>
-                    <Text style={styles.finishStatEmoji}>🎯</Text>
+                    <AnimatedLearningSticker variant="coin" size={28} />
                     <Text style={[styles.finishStatLabel, darkMode && styles.darkMutedText]}>
                       Difficulty
                     </Text>
@@ -577,7 +585,7 @@ export default function GradeTwoLessonsScreen({
                     </Text>
                   </View>
                   <View style={[styles.finishStat, darkMode && styles.darkFinishStat]}>
-                    <Text style={styles.finishStatEmoji}>💡</Text>
+                    <AnimatedLearningSticker variant="owl" size={28} />
                     <Text style={[styles.finishStatLabel, darkMode && styles.darkMutedText]}>
                       Mistakes
                     </Text>
@@ -690,7 +698,7 @@ export default function GradeTwoLessonsScreen({
         ) : activeSubject ? (
           <View style={styles.trail}>
             <View style={styles.trailHeading}>
-              <Text style={styles.trailFlag}>🚩</Text>
+              <AnimatedLearningSticker variant="plant" size={34} />
               <Text style={[styles.trailTitle, darkMode && styles.darkText]}>
                 Your {activeSubject.title} adventure
               </Text>
@@ -717,7 +725,7 @@ export default function GradeTwoLessonsScreen({
                         ]}
                       />
                     ) : (
-                      <Text style={styles.roadFinish}>🏁</Text>
+                      <AnimatedLearningSticker variant="coin" size={26} />
                     )}
                     <View
                       style={[
@@ -750,6 +758,7 @@ export default function GradeTwoLessonsScreen({
                         pressed && styles.pressed,
                       ]}
                     >
+                      <StorybookPicture label={lesson.title} size={46} />
                       <View style={styles.lessonCopy}>
                         <Text
                           style={[
@@ -763,14 +772,21 @@ export default function GradeTwoLessonsScreen({
                         <Text style={[styles.lessonTitle, darkMode && styles.darkText]}>
                           {lesson.title}
                         </Text>
-                        <Text style={[styles.lessonOverview, darkMode && styles.darkMutedText]}>
-                          {gradeTwoMiniGameInfo[lesson.miniGame].emoji}{" "}
-                          {gradeTwoMiniGameInfo[lesson.miniGame].title} · {lesson.overview}
-                        </Text>
+                        <View style={styles.lessonGameLine}>
+                          <StorybookPicture
+                            label={gradeTwoMiniGameInfo[lesson.miniGame].title}
+                            emoji={gradeTwoMiniGameInfo[lesson.miniGame].emoji}
+                            size={28}
+                          />
+                          <Text style={[styles.lessonOverview, darkMode && styles.darkMutedText]}>
+                            {gradeTwoMiniGameInfo[lesson.miniGame].title} · {lesson.overview}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={[styles.lessonArrow, darkMode && styles.darkMutedText]}>
-                        {locked ? "🔒" : "›"}
-                      </Text>
+                      <AnimatedLearningSticker
+                        variant={locked ? "owl" : complete ? "coin" : "plant"}
+                        size={32}
+                      />
                     </Pressable>
                   </Animated.View>
                 </View>
@@ -794,7 +810,7 @@ export default function GradeTwoLessonsScreen({
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.subjectIcon}>{subject.emoji}</Text>
+                <StorybookPicture label={subject.title} size={58} />
                 <Text style={[styles.subjectTitle, darkMode && styles.darkText]}>
                   {subject.title}
                 </Text>
@@ -802,7 +818,7 @@ export default function GradeTwoLessonsScreen({
                   <Text style={[styles.subjectCount, darkMode && styles.darkMutedText]}>
                     {subject.lessons.length} lessons
                   </Text>
-                  <Text style={[styles.subjectArrow, darkMode && styles.darkMutedText]}>→</Text>
+                  <AnimatedLearningSticker variant="plant" size={26} />
                 </View>
               </Pressable>
             ))}
@@ -849,6 +865,13 @@ export default function GradeTwoLessonsScreen({
             : ""
         }
         emoji={activeLesson ? gradeTwoMiniGameInfo[activeLesson.miniGame].emoji : ""}
+        stickerVariant={
+          activeLesson
+            ? learningStickerVariantForIndex(
+                subjects.findIndex((subject) => subject.id === activeSubject?.id)
+              )
+            : undefined
+        }
         onStart={() => setLessonStarted(true)}
         onRequestClose={handleBack}
       />
@@ -869,7 +892,6 @@ const styles = StyleSheet.create({
   subtitle: { color: "#36566A", fontSize: 15, marginTop: 6, textAlign: "center" },
   subjects: { gap: 12 },
   subjectCard: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#CDEEF1", borderRadius: 20, borderWidth: 1.5, justifyContent: "center", minHeight: 168, padding: 16 },
-  subjectIcon: { fontSize: 54 },
   subjectTitle: { color: "#173B53", fontSize: 17, fontWeight: "900", marginTop: 9, textAlign: "center" },
   subjectFooter: { alignItems: "center", flexDirection: "row", gap: 10, marginTop: 8 },
   subjectCount: { color: "#6E8190", fontSize: 14, fontWeight: "700" },
@@ -892,6 +914,7 @@ const styles = StyleSheet.create({
   lockedLessonCard: { backgroundColor: "#F1F4F5", borderColor: "#D4DEE1" },
   darkLockedLessonCard: { backgroundColor: "#26334A", borderColor: "#3C4B63" },
   lessonCopy: { flex: 1 },
+  lessonGameLine: { alignItems: "center", flexDirection: "row", gap: 6 },
   stepStatus: { color: "#258EA3", fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
   lessonTitle: { color: "#173B53", fontSize: 15, fontWeight: "900", lineHeight: 20, marginTop: 4 },
   lessonOverview: { color: "#536D79", fontSize: 12, lineHeight: 17, marginTop: 4 },

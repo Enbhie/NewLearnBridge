@@ -1,10 +1,12 @@
-import { createHash, randomBytes } from "node:crypto";
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
-import { defineSecret, defineString } from "firebase-functions/params";
-import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
-import { logger } from "firebase-functions";
+import {createHash, randomBytes, randomInt, timingSafeEqual} from "node:crypto";
+import {getApps, initializeApp} from "firebase-admin/app";
+import {getFirestore, Timestamp} from "firebase-admin/firestore";
+import {getStorage} from "firebase-admin/storage";
+import {getDatabase} from "firebase-admin/database";
+import {defineSecret, defineString} from "firebase-functions/params";
+import {HttpsError, onCall, onRequest} from "firebase-functions/v2/https";
+import {logger} from "firebase-functions";
+import {v2 as cloudinary} from "cloudinary";
 
 initializeApp();
 
@@ -12,11 +14,126 @@ const db = getFirestore();
 const bucket = getStorage().bucket();
 const region = "us-central1";
 const maxPhotoBytes = 5 * 1024 * 1024;
+const reviewPinLifetimeMs = 24 * 60 * 60 * 1000;
+const maxReviewPinAttempts = 5;
 const resendApiKey = defineSecret("RESEND_API_KEY");
+const cloudinaryApiSecret = defineSecret("CLOUDINARY_API_SECRET");
 const missionEmailFrom = defineString("MISSION_EMAIL_FROM");
 const missionReviewBaseUrl = defineString("MISSION_REVIEW_BASE_URL", {
   default: "",
 });
+const cloudinaryCloudName = defineString("CLOUDINARY_CLOUD_NAME");
+const cloudinaryApiKey = defineString("CLOUDINARY_API_KEY");
+const firebaseDatabaseUrl = defineString("FIREBASE_DATABASE_URL");
+
+function configureCloudinary(): void {
+  cloudinary.config({
+    cloud_name: cloudinaryCloudName.value(),
+    api_key: cloudinaryApiKey.value(),
+    api_secret: cloudinaryApiSecret.value(),
+    secure: true,
+  });
+}
+
+function getRealtimeDatabase() {
+  const appName = "mission-review-database";
+  const app =
+    getApps().find((candidate) => candidate.name === appName) ??
+    initializeApp(
+      {databaseURL: firebaseDatabaseUrl.value()},
+      appName
+    );
+  return getDatabase(app);
+}
+
+async function getCloudinaryReviewUrl(submission: Record<string, unknown>): Promise<string> {
+  const uid = typeof submission.uid === "string" ? submission.uid : "";
+  const submissionId = typeof submission.id === "string" ? submission.id : "";
+  const databaseSubmissionId = typeof submission.databaseSubmissionId === "string" ?
+    submission.databaseSubmissionId :
+    "";
+  if (!uid || !submissionId) {
+    throw new Error("Mission owner details are missing.");
+  }
+  const databasePath = databaseSubmissionId ?
+    `submissions/${uid}/${databaseSubmissionId}/imageUrl` :
+    `missionSubmissions/${uid}/${submissionId}/secureUrl`;
+  const snapshot = await getRealtimeDatabase()
+    .ref(databasePath)
+    .get();
+  const secureUrl = snapshot.val();
+  if (
+    typeof secureUrl !== "string" ||
+    !secureUrl.startsWith(`https://res.cloudinary.com/${cloudinaryCloudName.value()}/image/upload/`)
+  ) {
+    throw new Error("The Cloudinary mission photo URL is unavailable.");
+  }
+  return secureUrl;
+}
+
+async function updateDatabaseSubmissionStatus(
+  submission: Record<string, unknown>,
+  status: "approved" | "rejected"
+): Promise<void> {
+  const uid = typeof submission.uid === "string" ? submission.uid : "";
+  const databaseSubmissionId = typeof submission.databaseSubmissionId === "string" ?
+    submission.databaseSubmissionId :
+    "";
+  if (!uid || !databaseSubmissionId) return;
+  await getRealtimeDatabase()
+    .ref(`submissions/${uid}/${databaseSubmissionId}/status`)
+    .set(status);
+}
+
+async function deleteMissionPhoto(submission: Record<string, unknown>): Promise<void> {
+  if (submission.storageProvider === "cloudinary") {
+    const publicId =
+      typeof submission.cloudinaryPublicId === "string" ?
+        submission.cloudinaryPublicId :
+        "";
+    const uid = typeof submission.uid === "string" ? submission.uid : "";
+    const submissionId = typeof submission.id === "string" ? submission.id : "";
+    const cleanupTasks: Promise<unknown>[] = [];
+    if (publicId) {
+      configureCloudinary();
+      cleanupTasks.push(
+        cloudinary.uploader.destroy(publicId, {
+          resource_type: "image",
+          type: "upload",
+          invalidate: true,
+        })
+      );
+    }
+    if (uid && submissionId) {
+      cleanupTasks.push(
+        getRealtimeDatabase()
+          .ref(`missionSubmissions/${uid}/${submissionId}`)
+          .remove()
+      );
+    }
+    if (uid && typeof submission.databaseSubmissionId === "string") {
+      cleanupTasks.push(
+        getRealtimeDatabase()
+          .ref(`submissions/${uid}/${submission.databaseSubmissionId}/imageUrl`)
+          .remove()
+      );
+    }
+    const cleanupResults = await Promise.allSettled(cleanupTasks);
+    const cleanupErrors = cleanupResults
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => result.reason);
+    if (cleanupErrors.length > 0) {
+      logger.warn("Cloudinary mission photo cleanup had failures", {
+        cleanupErrors,
+      });
+      throw new Error("Could not fully delete the mission photo.");
+    }
+    return;
+  }
+  if (typeof submission.storagePath === "string") {
+    await bucket.file(submission.storagePath).delete({ignoreNotFound: true});
+  }
+}
 
 const missionDetails: Record<string, { title: string; parentCheck: string }> = {
   "K-3": {
@@ -156,11 +273,11 @@ type SubmissionStatus =
 
 function escapeHtml(value: string): string {
   return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function reviewBaseUrl(): string {
@@ -176,23 +293,13 @@ async function sendParentEmail(input: {
   missionTitle: string;
   parentCheck: string;
   reviewUrl: string;
-  photo: Buffer;
-  contentType: string;
+  reviewPin: string;
   submissionId: string;
 }): Promise<void> {
-  const contentId = "mission-evidence";
-  const extensionByType: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/heic": "heic",
-    "image/heif": "heif",
-  };
-  const extension = extensionByType[input.contentType] ?? "jpg";
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${resendApiKey.value()}`,
+      "Authorization": `Bearer ${resendApiKey.value()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -202,26 +309,19 @@ async function sendParentEmail(input: {
       text: [
         `Your child submitted "${input.missionTitle}" for review.`,
         input.parentCheck,
-        "The submitted photo is attached.",
         `Review and confirm the mission: ${input.reviewUrl}`,
+        `Review PIN: ${input.reviewPin}`,
+        "The PIN expires in 24 hours and is required to view the photo.",
       ].join("\n\n"),
       html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#173b53">
         <h1>Mission ready for review</h1>
         <h2>${escapeHtml(input.missionTitle)}</h2>
         <p>${escapeHtml(input.parentCheck)}</p>
-        <p>Your child's photo is attached. Review it, then choose whether to approve the mission or ask for a clearer submission.</p>
-        <img src="cid:${contentId}" alt="Mission photo" style="display:block;max-width:100%;max-height:480px;margin:20px auto;border-radius:12px" />
+        <p>Open the private review link, then enter this PIN to view the photo:</p>
+        <p style="font-size:24px;font-weight:bold;letter-spacing:4px">${escapeHtml(input.reviewPin)}</p>
         <p><a href="${escapeHtml(input.reviewUrl)}" style="display:inline-block;background:#397147;color:white;padding:14px 20px;border-radius:8px;text-decoration:none;font-weight:bold">Review this mission</a></p>
-        <p style="font-size:12px;color:#667">This private review link is for the parent or guardian. If you did not expect it, you can ignore this email.</p>
+        <p style="font-size:12px;color:#667">The PIN expires in 24 hours and is required to view the photo. The link and PIN are for the parent or guardian only.</p>
       </div>`,
-      attachments: [
-        {
-          filename: `learnbridge-${input.submissionId}.${extension}`,
-          content: input.photo.toString("base64"),
-          content_type: input.contentType,
-          content_id: contentId,
-        },
-      ],
     }),
   });
 
@@ -241,7 +341,7 @@ export const submitMissionForReview = onCall(
     region,
     memory: "512MiB",
     timeoutSeconds: 60,
-    secrets: [resendApiKey],
+    secrets: [resendApiKey, cloudinaryApiSecret],
   },
   async (request) => {
     if (!request.auth) {
@@ -257,7 +357,11 @@ export const submitMissionForReview = onCall(
     const data = request.data as {
       missionId?: unknown;
       submissionId?: unknown;
+      storageProvider?: unknown;
       storagePath?: unknown;
+      cloudinaryPublicId?: unknown;
+      cloudinarySecureUrl?: unknown;
+      databaseSubmissionId?: unknown;
       submittedAt?: unknown;
     };
     const missionId = typeof data.missionId === "string" ? data.missionId : "";
@@ -265,11 +369,19 @@ export const submitMissionForReview = onCall(
       typeof data.submissionId === "string" ? data.submissionId : "";
     const storagePath =
       typeof data.storagePath === "string" ? data.storagePath : "";
+    const storageProvider =
+      data.storageProvider === "cloudinary" ? "cloudinary" : "firebase";
+    const cloudinaryPublicId =
+      typeof data.cloudinaryPublicId === "string" ? data.cloudinaryPublicId : "";
+    const cloudinarySecureUrl =
+      typeof data.cloudinarySecureUrl === "string" ? data.cloudinarySecureUrl : "";
+    const databaseSubmissionId =
+      typeof data.databaseSubmissionId === "string" ? data.databaseSubmissionId : "";
     const submittedAt =
       typeof data.submittedAt === "string" &&
-      Number.isFinite(Date.parse(data.submittedAt))
-        ? Timestamp.fromDate(new Date(data.submittedAt))
-        : Timestamp.now();
+      Number.isFinite(Date.parse(data.submittedAt)) ?
+        Timestamp.fromDate(new Date(data.submittedAt)) :
+        Timestamp.now();
     const mission = missionDetails[missionId];
 
     if (!mission) {
@@ -278,16 +390,36 @@ export const submitMissionForReview = onCall(
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(submissionId)) {
       throw new HttpsError("invalid-argument", "The mission submission ID is invalid.");
     }
-    const expectedPath =
-      `mission-submissions/${request.auth.uid}/${submissionId}/evidence`;
-    if (storagePath !== expectedPath) {
-      throw new HttpsError("permission-denied", "The uploaded photo does not belong to this account.");
+    if (
+      databaseSubmissionId &&
+      !/^[A-Za-z0-9_-]{20,64}$/.test(databaseSubmissionId)
+    ) {
+      throw new HttpsError(
+        "invalid-argument",
+        "The Realtime Database submission ID is invalid."
+      );
+    }
+    const expectedPath = `mission-submissions/${request.auth.uid}/${submissionId}/evidence`;
+    const expectedCloudinaryId =
+      `mission-submissions/${request.auth.uid}/${submissionId}`;
+    if (
+      (storageProvider === "firebase" && storagePath !== expectedPath) ||
+      (storageProvider === "cloudinary" &&
+        (cloudinaryPublicId !== expectedCloudinaryId ||
+          !cloudinarySecureUrl.startsWith(
+            `https://res.cloudinary.com/${cloudinaryCloudName.value()}/image/upload/`
+          )))
+    ) {
+      throw new HttpsError(
+        "permission-denied",
+        "The uploaded photo does not belong to this account."
+      );
     }
 
     const parentEmail =
-      typeof request.auth.token.email === "string"
-        ? request.auth.token.email.trim()
-        : "";
+      typeof request.auth.token.email === "string" ?
+        request.auth.token.email.trim() :
+        "";
     if (!parentEmail) {
       throw new HttpsError(
         "failed-precondition",
@@ -295,21 +427,91 @@ export const submitMissionForReview = onCall(
       );
     }
 
-    const photoFile = bucket.file(storagePath);
-    const [metadata] = await photoFile.getMetadata().catch(() => {
-      throw new HttpsError(
-        "not-found",
-        "The mission photo could not be found. Please choose it again."
-      );
-    });
-    const size = Number(metadata.size ?? 0);
-    const contentType = metadata.contentType ?? "";
+    let size: number;
+    let contentType: string;
+    if (storageProvider === "cloudinary") {
+      configureCloudinary();
+      const databasePath = databaseSubmissionId ?
+        `submissions/${request.auth.uid}/${databaseSubmissionId}` :
+        `missionSubmissions/${request.auth.uid}/${submissionId}`;
+      const databaseRecord = await getRealtimeDatabase().ref(databasePath).get();
+      const record = databaseRecord.val() as
+        | {
+            missionId?: unknown;
+            imageUrl?: unknown;
+            secureUrl?: unknown;
+            status?: unknown;
+          }
+        | null;
+      const validDatabaseRecord = databaseSubmissionId ?
+        record?.missionId === missionId &&
+          record.imageUrl === cloudinarySecureUrl &&
+          record.status === "pending" :
+        record?.secureUrl === cloudinarySecureUrl;
+      if (!validDatabaseRecord) {
+        throw new HttpsError(
+          "permission-denied",
+          "The uploaded photo URL and pending submission are not saved to this account."
+        );
+      }
+      let resource: Awaited<ReturnType<typeof cloudinary.api.resource>>;
+      try {
+        resource = await cloudinary.api.resource(cloudinaryPublicId, {
+          resource_type: "image",
+          type: "upload",
+          context: true,
+        });
+      } catch (error) {
+        logger.warn("Could not verify uploaded Cloudinary mission photo", {
+          submissionId,
+          error,
+        });
+        throw new HttpsError(
+          "not-found",
+          "The mission photo could not be found. Please choose it again."
+        );
+      }
+      size = Number(resource.bytes ?? 0);
+      const format = typeof resource.format === "string" ? resource.format : "";
+      contentType = format === "jpg" || format === "jpeg" ?
+        "image/jpeg" :
+        `image/${format}`;
+      if (
+        resource.public_id !== expectedCloudinaryId ||
+        resource.type !== "upload" ||
+        resource.secure_url !== cloudinarySecureUrl ||
+        resource.context?.custom?.owner_uid !== request.auth.uid ||
+        resource.context?.custom?.submission_id !== submissionId
+      ) {
+        throw new HttpsError(
+          "permission-denied",
+          "The uploaded photo does not belong to this account."
+        );
+      }
+    } else {
+      const photoFile = bucket.file(storagePath);
+      const [metadata] = await photoFile.getMetadata().catch(() => {
+        throw new HttpsError(
+          "not-found",
+          "The mission photo could not be found. Please choose it again."
+        );
+      });
+      size = Number(metadata.size ?? 0);
+      contentType = metadata.contentType ?? "";
+      if (
+        metadata.metadata?.ownerUid !== request.auth.uid ||
+        metadata.metadata?.submissionId !== submissionId
+      ) {
+        throw new HttpsError(
+          "permission-denied",
+          "The uploaded photo does not belong to this account."
+        );
+      }
+    }
     if (
       size <= 0 ||
       size > maxPhotoBytes ||
-      !/^image\/(jpeg|png|webp|heic|heif)$/.test(contentType) ||
-      metadata.metadata?.ownerUid !== request.auth.uid ||
-      metadata.metadata?.submissionId !== submissionId
+      !/^image\/(jpeg|jpg|png|webp|heic|heif)$/.test(contentType)
     ) {
       throw new HttpsError(
         "invalid-argument",
@@ -321,8 +523,15 @@ export const submitMissionForReview = onCall(
     const lockRef = db.collection("missionReviewLocks").doc(request.auth.uid);
     const rawToken = randomBytes(32).toString("hex");
     const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    const reviewPin = randomInt(0, 1_000_000).toString().padStart(6, "0");
+    const pinHash = createHash("sha256")
+      .update(`${rawToken}:${reviewPin}`)
+      .digest("hex");
     const tokenRef = db.collection("missionReviewTokens").doc(tokenHash);
     const createdAt = Timestamp.now();
+    const expiresAt = Timestamp.fromMillis(
+      createdAt.toMillis() + reviewPinLifetimeMs
+    );
     let shouldSendEmail = false;
 
     await db.runTransaction(async (transaction) => {
@@ -350,6 +559,9 @@ export const submitMissionForReview = onCall(
           status: "pending" satisfies SubmissionStatus,
           updatedAt: createdAt,
           storagePath,
+          storageProvider,
+          cloudinaryPublicId,
+          ...(databaseSubmissionId ? {databaseSubmissionId} : {}),
           clientSubmittedAt: submittedAt,
         });
       } else {
@@ -361,6 +573,7 @@ export const submitMissionForReview = onCall(
         }
         transaction.create(submissionRef, {
           uid: request.auth!.uid,
+          id: submissionId,
           missionId,
           title: mission.title,
           parentCheck: mission.parentCheck,
@@ -370,34 +583,39 @@ export const submitMissionForReview = onCall(
           updatedAt: createdAt,
           clientSubmittedAt: submittedAt,
           storagePath,
+          storageProvider,
+          cloudinaryPublicId,
+          ...(databaseSubmissionId ? {databaseSubmissionId} : {}),
         });
       }
       transaction.create(lockRef, {
         submissionId,
+        tokenHash,
         createdAt,
       });
       transaction.create(tokenRef, {
         submissionId,
+        pinHash,
+        pinAttempts: 0,
+        expiresAt,
         createdAt,
       });
       shouldSendEmail = true;
     });
 
-    if (!shouldSendEmail) return { status: "pending" as const };
+    if (!shouldSendEmail) return {status: "pending" as const};
 
     try {
-      const [photo] = await photoFile.download();
       const tokenUrl = `${reviewBaseUrl()}?token=${encodeURIComponent(rawToken)}`;
       await sendParentEmail({
         to: parentEmail,
         missionTitle: mission.title,
         parentCheck: mission.parentCheck,
         reviewUrl: tokenUrl,
-        photo,
-        contentType,
+        reviewPin,
         submissionId,
       });
-      return { status: "pending" as const };
+      return {status: "pending" as const};
     } catch (error) {
       logger.error("Could not create mission review email", {
         submissionId,
@@ -449,22 +667,60 @@ function renderPage(title: string, body: string): string {
   </html>`;
 }
 
+function renderPinEntryPage(message = ""): string {
+  return renderPage(
+    "Unlock parent mission review",
+    `<h1>Parent review PIN</h1>
+    <p class="muted">Enter the 6-digit PIN sent to your email. It expires 24 hours after it was sent.</p>
+    ${message ? `<p class="criterion">${escapeHtml(message)}</p>` : ""}
+    <form method="post">
+      <label for="pin">6-digit PIN</label>
+      <input id="pin" name="pin" type="text" inputmode="numeric" autocomplete="one-time-code"
+        pattern="[0-9]{6}" maxlength="6" required autofocus />
+      <div class="actions"><button class="approve" type="submit" name="action" value="unlock">Unlock photo and review</button></div>
+    </form>`
+  );
+}
+
+function pinMatches(rawToken: string, submittedPin: string, expectedHash: unknown): boolean {
+  if (
+    !/^\d{6}$/.test(submittedPin) ||
+    typeof expectedHash !== "string" ||
+    !/^[a-f0-9]{64}$/.test(expectedHash)
+  ) {
+    return false;
+  }
+  const actualHash = createHash("sha256")
+    .update(`${rawToken}:${submittedPin}`)
+    .digest();
+  return timingSafeEqual(actualHash, Buffer.from(expectedHash, "hex"));
+}
+
 export const reviewMissionSubmission = onRequest(
   {
     region,
     memory: "512MiB",
     timeoutSeconds: 30,
+    secrets: [cloudinaryApiSecret],
   },
   async (request, response) => {
     response.set("Cache-Control", "no-store");
     response.set("Referrer-Policy", "no-referrer");
     response.set("X-Content-Type-Options", "nosniff");
-    response.set("Content-Security-Policy", "default-src 'none'; img-src https:; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+    response.set(
+      "Content-Security-Policy",
+      "default-src 'none'; img-src https:; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+    );
 
     const rawToken =
       typeof request.query.token === "string" ? request.query.token : "";
     if (!/^[a-f0-9]{64}$/.test(rawToken)) {
-      response.status(404).send(renderPage("Review link unavailable", "<h1>Review link unavailable</h1><p class=\"muted\">This private link is invalid. Ask your child to send the mission again.</p>"));
+      response.status(404).send(
+        renderPage(
+          "Review link unavailable",
+          "<h1>Review link unavailable</h1><p class=\"muted\">This private link is invalid. Ask your child to send the mission again.</p>"
+        )
+      );
       return;
     }
 
@@ -472,34 +728,179 @@ export const reviewMissionSubmission = onRequest(
     const tokenRef = db.collection("missionReviewTokens").doc(tokenHash);
     const tokenSnapshot = await tokenRef.get();
     if (!tokenSnapshot.exists) {
-      response.status(404).send(renderPage("Review link unavailable", "<h1>Review link unavailable</h1><p class=\"muted\">This private link has expired or was already used.</p>"));
+      response.status(404).send(
+        renderPage(
+          "Review link unavailable",
+          "<h1>Review link unavailable</h1><p class=\"muted\">This private link has expired or was already used.</p>"
+        )
+      );
       return;
     }
 
-    const submissionId = tokenSnapshot.data()?.submissionId;
+    const tokenData = tokenSnapshot.data()!;
+    const submissionId = tokenData.submissionId;
     if (typeof submissionId !== "string") {
-      response.status(404).send(renderPage("Review link unavailable", "<h1>Review link unavailable</h1><p class=\"muted\">This private link is incomplete.</p>"));
+      response.status(404).send(
+        renderPage(
+          "Review link unavailable",
+          "<h1>Review link unavailable</h1><p class=\"muted\">This private link is incomplete.</p>"
+        )
+      );
       return;
     }
     const submissionRef = db.collection("missionSubmissions").doc(submissionId);
     const submissionSnapshot = await submissionRef.get();
     if (!submissionSnapshot.exists) {
-      response.status(404).send(renderPage("Review link unavailable", "<h1>Review link unavailable</h1><p class=\"muted\">This mission submission is no longer available.</p>"));
+      response.status(404).send(
+        renderPage(
+          "Review link unavailable",
+          "<h1>Review link unavailable</h1><p class=\"muted\">This mission submission is no longer available.</p>"
+        )
+      );
       return;
     }
 
     const submission = submissionSnapshot.data()!;
+    submission.id = submissionId;
     if (submission.status !== "pending") {
-      response.status(200).send(renderPage("Mission already reviewed", `<h1>Mission already reviewed</h1><p class="muted">${escapeHtml(submission.title ?? "This mission")} has already received a decision. Your child will see the result in LearnBridge.</p>`));
+      response.status(200).send(
+        renderPage(
+          "Mission already reviewed",
+          `<h1>Mission already reviewed</h1><p class="muted">${escapeHtml(String(submission.title ?? "This mission"))} has already received a decision. Your child will see the result in LearnBridge.</p>`
+        )
+      );
+      return;
+    }
+
+    const expiresAt = tokenData.expiresAt;
+    if (!(expiresAt instanceof Timestamp) || expiresAt.toMillis() <= Date.now()) {
+      const lockRef = db.collection("missionReviewLocks").doc(String(submission.uid));
+      await db.runTransaction(async (transaction) => {
+        const [currentSubmission, currentToken, lock] = await Promise.all([
+          transaction.get(submissionRef),
+          transaction.get(tokenRef),
+          transaction.get(lockRef),
+        ]);
+        if (currentSubmission.exists && currentSubmission.data()?.status === "pending") {
+          transaction.update(submissionRef, {
+            status: "needs_revision" satisfies SubmissionStatus,
+            updatedAt: Timestamp.now(),
+          });
+        }
+        if (lock.exists && lock.data()?.tokenHash === tokenHash) {
+          transaction.delete(lockRef);
+        }
+        if (currentToken.exists) transaction.delete(tokenRef);
+      });
+      await updateDatabaseSubmissionStatus(submission, "rejected").catch((error) =>
+        logger.warn("Could not mirror expired PIN decision to Realtime Database", {
+          submissionId,
+          error,
+        })
+      );
+      await deleteMissionPhoto(submission).catch((error) =>
+        logger.warn("Could not delete mission photo after PIN expiry", {
+          submissionId,
+          error,
+        })
+      );
+      response.status(410).send(
+        renderPage(
+          "Review PIN expired",
+          "<h1>Review PIN expired</h1><p class=\"muted\">Ask your child to submit the work again to get a new review link and PIN.</p>"
+        )
+      );
       return;
     }
 
     if (request.method === "GET") {
-      const photoFile = bucket.file(String(submission.storagePath));
-      const [photoUrl] = await photoFile.getSignedUrl({
-        action: "read",
-        expires: Date.now() + 30 * 60 * 1000,
+      response.status(200).send(renderPinEntryPage());
+      return;
+    }
+    if (request.method !== "POST") {
+      response.set("Allow", "GET, POST").status(405).send("Method not allowed.");
+      return;
+    }
+
+    const submittedPin =
+      typeof request.body?.pin === "string" ? request.body.pin : "";
+    if (!pinMatches(rawToken, submittedPin, tokenData.pinHash)) {
+      const lockRef = db.collection("missionReviewLocks").doc(String(submission.uid));
+      let attemptsRemaining = 0;
+      let attemptsExceeded = false;
+      await db.runTransaction(async (transaction) => {
+        const [currentToken, currentSubmission, lock] = await Promise.all([
+          transaction.get(tokenRef),
+          transaction.get(submissionRef),
+          transaction.get(lockRef),
+        ]);
+        if (!currentToken.exists || !currentSubmission.exists) return;
+        const attempts = Number(currentToken.data()?.pinAttempts ?? 0) + 1;
+        attemptsRemaining = Math.max(0, maxReviewPinAttempts - attempts);
+        if (attempts >= maxReviewPinAttempts) {
+          attemptsExceeded = true;
+          if (currentSubmission.data()?.status === "pending") {
+            transaction.update(submissionRef, {
+              status: "needs_revision" satisfies SubmissionStatus,
+              updatedAt: Timestamp.now(),
+            });
+          }
+          if (lock.exists && lock.data()?.tokenHash === tokenHash) {
+            transaction.delete(lockRef);
+          }
+          transaction.delete(tokenRef);
+        } else {
+          transaction.update(tokenRef, {pinAttempts: attempts});
+        }
       });
+      if (attemptsExceeded) {
+        await updateDatabaseSubmissionStatus(submission, "rejected").catch((error) =>
+          logger.warn("Could not mirror locked PIN decision to Realtime Database", {
+            submissionId,
+            error,
+          })
+        );
+        await deleteMissionPhoto(submission).catch((error) =>
+          logger.warn("Could not delete mission photo after PIN lockout", {
+            submissionId,
+            error,
+          })
+        );
+        response.status(429).send(
+          renderPage(
+            "PIN attempts exceeded",
+            "<h1>PIN attempts exceeded</h1><p class=\"muted\">For security, this review PIN is no longer valid. Ask your child to submit the work again.</p>"
+          )
+        );
+        return;
+      }
+      response.status(400).send(
+        renderPinEntryPage(
+          `Incorrect PIN. ${attemptsRemaining} attempt${attemptsRemaining === 1 ? "" : "s"} remaining.`
+        )
+      );
+      return;
+    }
+
+    const action = request.body?.action;
+    const decision =
+      action === "approve" ?
+        "approved" :
+        action === "needs_revision" ?
+          "needs_revision" :
+          null;
+
+    if (!decision) {
+      let photoUrl: string;
+      if (submission.storageProvider === "cloudinary") {
+        configureCloudinary();
+        photoUrl = await getCloudinaryReviewUrl(submission);
+      } else {
+        [photoUrl] = await bucket.file(String(submission.storagePath)).getSignedUrl({
+          action: "read",
+          expires: Date.now() + 30 * 60 * 1000,
+        });
+      }
       response.status(200).send(
         renderPage(
           "Parent mission review",
@@ -509,29 +910,14 @@ export const reviewMissionSubmission = onRequest(
           <p class="muted">Look at the photo and confirm the work with your child.</p>
           <img src="${escapeHtml(photoUrl)}" alt="Photo submitted for ${escapeHtml(String(submission.title))}" />
           <form method="post">
+            <input type="hidden" name="pin" value="${escapeHtml(submittedPin)}" />
             <div class="actions">
-              <button class="approve" type="submit" name="decision" value="approve">Confirm mission</button>
-              <button class="retry" type="submit" name="decision" value="needs_revision">Ask for another photo</button>
+              <button class="approve" type="submit" name="action" value="approve">Confirm mission</button>
+              <button class="retry" type="submit" name="action" value="needs_revision">Ask for another photo</button>
             </div>
           </form>`
         )
       );
-      return;
-    }
-
-    if (request.method !== "POST") {
-      response.set("Allow", "GET, POST").status(405).send("Method not allowed.");
-      return;
-    }
-
-    const decision =
-      request.body?.decision === "approve"
-        ? "approved"
-        : request.body?.decision === "needs_revision"
-          ? "needs_revision"
-          : null;
-    if (!decision) {
-      response.status(400).send(renderPage("Choose a review decision", "<h1>Choose a review decision</h1><p class=\"muted\">Use one of the review buttons to continue.</p>"));
       return;
     }
 
@@ -547,16 +933,17 @@ export const reviewMissionSubmission = onRequest(
         if (
           !currentSubmission.exists ||
           currentSubmission.data()?.status !== "pending" ||
-          !currentToken.exists
+          !currentToken.exists ||
+          !pinMatches(rawToken, submittedPin, currentToken.data()?.pinHash)
         ) {
-          throw new Error("This mission has already been reviewed.");
+          throw new Error("This mission has already been reviewed or unlocked.");
         }
         transaction.update(submissionRef, {
           status: decision,
           updatedAt: decisionTime,
           reviewedAt: decisionTime,
         });
-        if (lock.exists && lock.data()?.submissionId === submissionId) {
+        if (lock.exists && lock.data()?.tokenHash === tokenHash) {
           transaction.delete(lockRef);
         }
         transaction.delete(tokenRef);
@@ -569,27 +956,33 @@ export const reviewMissionSubmission = onRequest(
       response.status(409).send(
         renderPage(
           "Mission already reviewed",
-          "<h1>Mission already reviewed</h1><p class=\"muted\">The review link may have already been used. Your child will see the current result in LearnBridge.</p>"
+          "<h1>Mission already reviewed</h1><p class=\"muted\">The review link may already have been used. Your child will see the current result in LearnBridge.</p>"
         )
       );
       return;
     }
 
-    await bucket
-      .file(String(submission.storagePath))
-      .delete({ ignoreNotFound: true })
-      .catch((error) => {
-        logger.warn("Could not delete reviewed mission photo", {
-          submissionId,
-          error,
-        });
+    await updateDatabaseSubmissionStatus(
+      submission,
+      decision === "approved" ? "approved" : "rejected"
+    ).catch((error) =>
+      logger.warn("Could not mirror parent decision to Realtime Database", {
+        submissionId,
+        error,
+      })
+    );
+    await deleteMissionPhoto(submission).catch((error) => {
+      logger.warn("Could not delete reviewed mission photo", {
+        submissionId,
+        error,
       });
+    });
     response.status(200).send(
       renderPage(
         decision === "approved" ? "Mission approved" : "Photo resubmission requested",
-        decision === "approved"
-          ? `<h1>Mission approved!</h1><p class="muted">${escapeHtml(String(submission.title))} is confirmed. Your child will see a success result in LearnBridge.</p>`
-          : `<h1>Another photo requested</h1><p class="muted">Your child will see a message in LearnBridge and can send a new photo.</p>`
+        decision === "approved" ?
+          `<h1>Mission approved!</h1><p class="muted">${escapeHtml(String(submission.title))} is confirmed. Your child will see a success result in LearnBridge.</p>` :
+          "<h1>Another photo requested</h1><p class=\"muted\">Your child will see a message in LearnBridge and can send a new photo.</p>"
       )
     );
   }

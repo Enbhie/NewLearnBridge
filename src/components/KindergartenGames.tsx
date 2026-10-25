@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
+import AnimatedLearningSticker from "./AnimatedLearningSticker";
+import StorybookPicture from "./StorybookPicture";
 import { AppAppearanceContext } from "./CloudBackdrop";
 import { playFeedback } from "../utils/soundEffects";
 
@@ -181,6 +183,7 @@ export function ChoiceGame({
         return (
           <Pressable
             key={`${option.label}-${i}`}
+            celebrateOnPress
             disabled={reveal}
             onPress={() => pick(i)}
             style={[
@@ -190,7 +193,11 @@ export function ChoiceGame({
               reveal && isChosen && !option.correct && styles.optionWrong,
             ]}
           >
-            {option.emoji ? <Text style={styles.optionEmoji}>{option.emoji}</Text> : null}
+            <StorybookPicture
+              label={option.label}
+              emoji={option.emoji}
+              size={38}
+            />
             <Text style={styles.optionText}>{option.label}</Text>
           </Pressable>
         );
@@ -898,7 +905,6 @@ export const styles = StyleSheet.create({
   option: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#FFFFFF", borderColor: "#D5F5EB", borderWidth: 3, borderRadius: 18, padding: 14, marginBottom: 10, minHeight: 64 },
   optionCorrect: { borderColor: "#66CBB1", backgroundColor: "#D5F5EB" },
   optionWrong: { borderColor: "#E53E3E", backgroundColor: "#FFE0DC" },
-  optionEmoji: { fontSize: 34 },
   optionText: { flex: 1, color: "#173B53", fontSize: 16, fontWeight: "800" },
   primaryBtn: { alignItems: "center", justifyContent: "center", minHeight: 56, borderRadius: 16, backgroundColor: "#F17D65", paddingHorizontal: 16, marginTop: 8, alignSelf: "stretch" },
   primaryBtnText: { color: "#FFFDF5", fontSize: 16, fontWeight: "800" },

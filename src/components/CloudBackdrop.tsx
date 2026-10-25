@@ -64,6 +64,8 @@ export default function CloudBackdrop() {
   const mountainPosition = useRef(new Animated.Value(0)).current;
   const shimmer = useRef(new Animated.Value(0)).current;
   const sunRotation = useRef(new Animated.Value(0)).current;
+  const firstComet = useRef(new Animated.Value(0)).current;
+  const secondComet = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const cloudAnimations = CLOUDS.map((cloud, index) => {
@@ -138,6 +140,38 @@ export default function CloudBackdrop() {
           useNativeDriver: Platform.OS !== "web",
         })
       ),
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(1800),
+          Animated.timing(firstComet, {
+            toValue: 1,
+            duration: 2200,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: Platform.OS !== "web",
+          }),
+          Animated.timing(firstComet, {
+            toValue: 0,
+            duration: 1,
+            useNativeDriver: Platform.OS !== "web",
+          }),
+        ])
+      ),
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(7600),
+          Animated.timing(secondComet, {
+            toValue: 1,
+            duration: 1900,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: Platform.OS !== "web",
+          }),
+          Animated.timing(secondComet, {
+            toValue: 0,
+            duration: 1,
+            useNativeDriver: Platform.OS !== "web",
+          }),
+        ])
+      ),
     ];
 
     animations.forEach((animation) => animation.start());
@@ -148,6 +182,8 @@ export default function CloudBackdrop() {
     secondPlanetPosition,
     shimmer,
     sunRotation,
+    firstComet,
+    secondComet,
     width,
   ]);
 
@@ -158,6 +194,28 @@ export default function CloudBackdrop() {
   const sunRotate = sunRotation.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "360deg"],
+  });
+  const cometStyle = (progress: Animated.Value, top: number) => ({
+    top: height * top,
+    opacity: progress.interpolate({
+      inputRange: [0, 0.16, 0.72, 0.9, 1],
+      outputRange: [0, 0, 0.95, 0.45, 0],
+    }),
+    transform: [
+      {
+        translateX: progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-150, width + 150],
+        }),
+      },
+      {
+        translateY: progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-10, height * 0.18],
+        }),
+      },
+      { rotate: "-24deg" },
+    ],
   });
 
   return (
@@ -223,6 +281,18 @@ export default function CloudBackdrop() {
               ✦
             </Animated.Text>
           ))}
+          <Animated.View
+            style={[styles.shootingStar, cometStyle(firstComet, 0.08)]}
+          >
+            <View style={styles.shootingStarTail} />
+            <View style={styles.shootingStarCore} />
+          </Animated.View>
+          <Animated.View
+            style={[styles.shootingStar, cometStyle(secondComet, 0.28)]}
+          >
+            <View style={styles.shootingStarTail} />
+            <View style={styles.shootingStarCore} />
+          </Animated.View>
           <View style={styles.moonGlow} />
           <View style={styles.moon}>
             <View style={[styles.moonCrater, styles.craterOne]} />
@@ -316,6 +386,30 @@ const styles = StyleSheet.create({
   },
   daySky: {
     backgroundColor: "#73D3EA",
+  },
+  shootingStar: {
+    position: "absolute",
+    left: 0,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  shootingStarTail: {
+    width: 88,
+    height: 3,
+    borderRadius: 3,
+    backgroundColor: "rgba(174, 211, 255, 0.78)",
+  },
+  shootingStarCore: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: -1,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#B8D9FF",
+    shadowOpacity: 0.95,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 5,
   },
   nightSky: {
     backgroundColor: "#101936",

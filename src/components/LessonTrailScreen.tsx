@@ -2,7 +2,10 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Animated, Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { awardModuleBadge } from "../data/badges";
-import AnimatedLearningSticker from "./AnimatedLearningSticker";
+import AnimatedLearningSticker, {
+  learningStickerVariantForIndex,
+} from "./AnimatedLearningSticker";
+import StorybookPicture from "./StorybookPicture";
 import type { CategoryId } from "../data/learningContent";
 import type { Difficulty as LessonDifficulty } from "./AccountSettingsScreen";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
@@ -179,13 +182,14 @@ function ChoicePlayer({
         {round.art ? <FloatingEmoji emoji={round.art} style={styles.art} /> : null}
         <Text style={[styles.question, darkMode && styles.darkText]}>{round.q}</Text>
       </View>
-      {round.options.map((option) => {
+      {round.options.map((option, optionIndex) => {
         const isPicked = picked === option;
         const isAnswer = picked !== null && option === round.correct;
         return (
           <Pressable
             key={option}
             accessibilityRole="button"
+            celebrateOnPress
             disabled={picked !== null}
             onPress={() => choose(option)}
             style={[
@@ -197,7 +201,13 @@ function ChoicePlayer({
               darkMode && isPicked && !isAnswer && styles.darkOptionWrong,
             ]}
           >
-            <Text style={[styles.optionText, darkMode && styles.darkMutedText]}>{option}</Text>
+            <View style={styles.choiceContent}>
+              <StorybookPicture
+                label={option}
+                size={38}
+              />
+              <Text style={[styles.optionText, darkMode && styles.darkMutedText]}>{option}</Text>
+            </View>
           </Pressable>
         );
       })}
@@ -334,7 +344,13 @@ function OrderPlayer({
               onPress={() => pick(tile.order)}
               style={[styles.tile, darkMode && styles.darkOption, used && styles.tileUsed]}
             >
-              <Text style={[styles.tileText, darkMode && styles.darkMutedText]}>{tile.label}</Text>
+              <View style={styles.choiceContent}>
+                <AnimatedLearningSticker
+                  variant={learningStickerVariantForIndex(index * tiles.length + tile.order)}
+                  size={34}
+                />
+                <Text style={[styles.tileText, darkMode && styles.darkMutedText]}>{tile.label}</Text>
+              </View>
             </Pressable>
           );
         })}
@@ -451,7 +467,15 @@ function LessonPlayer({
               <Text style={[styles.learnText, darkMode && styles.darkMutedText]}>{lesson.learn}</Text>
             </View>
             <View style={[styles.gameCard, darkMode && styles.darkCard]}>
-              <Text style={[styles.cardTitle, darkMode && styles.darkText]}>🎮 Minigame: {lesson.gameName}</Text>
+              <View style={styles.gameCardTitle}>
+                <AnimatedLearningSticker
+                  variant={learningStickerVariantForIndex(lessonNumber - 1)}
+                  size={32}
+                />
+                <Text style={[styles.cardTitle, darkMode && styles.darkText]}>
+                  Minigame: {lesson.gameName}
+                </Text>
+              </View>
               <Text style={[styles.cardBlurb, darkMode && styles.darkMutedText]}>{lesson.blurb}</Text>
             </View>
             {canPlay ? (
@@ -512,7 +536,10 @@ function LessonPlayer({
         {phase === "result" ? (
           <View>
             <View style={[styles.hero, darkMode && styles.darkCard]}>
-              <Text style={styles.bigEmoji}>{result.passed ? "🌟" : "💪"}</Text>
+              <AnimatedLearningSticker
+                variant={result.passed ? "coin" : "owl"}
+                size={64}
+              />
               <Text style={[styles.heroTitle, darkMode && styles.darkText]}>
                 {result.passed ? "Lesson complete!" : "Almost there!"}
               </Text>
@@ -551,7 +578,10 @@ function LessonPlayer({
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.instructionsModal, darkMode && styles.darkCard]}>
-            <Text style={styles.modalEmoji}>{lesson.emoji}</Text>
+            <AnimatedLearningSticker
+              variant={learningStickerVariantForIndex(subject.lessons.indexOf(lesson))}
+              size={64}
+            />
             <Text style={[styles.modalEyebrow, darkMode && styles.darkMutedText]}>
               {subject.title} · Game time!
             </Text>
@@ -565,11 +595,10 @@ function LessonPlayer({
             <View style={styles.instructionList}>
               {gameInstructions.map((instruction, index) => (
                 <View key={instruction} style={styles.instructionRow}>
-                  <Text style={styles.instructionIcon}>
-                    {lesson.game.type === "choice"
-                      ? ["👀", "👆", "⭐"][index]
-                      : ["👀", "👆", "💪"][index]}
-                  </Text>
+                  <AnimatedLearningSticker
+                    variant={learningStickerVariantForIndex(index)}
+                    size={28}
+                  />
                   <Text style={[styles.instructionText, darkMode && styles.darkMutedText]}>
                     {instruction}
                   </Text>
@@ -584,7 +613,7 @@ function LessonPlayer({
               }}
               style={styles.modalPlayButton}
             >
-              <Text style={styles.modalPlayButtonText}>LET'S PLAY! 🎉</Text>
+              <Text style={styles.modalPlayButtonText}>LET&apos;S PLAY!</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -639,6 +668,7 @@ export default function LessonTrailScreen({
   onRecordMistake,
 }: GradeScreenProps & TrailConfig) {
   const { darkMode } = useContext(AppAppearanceContext);
+  const isKindergarten = gradeLabel === "Kindergarten";
   const [view, setView] = useState<ViewState>({ kind: "subjects" });
 
   const lessonKey = (subjectId: string, lessonId: string) =>
@@ -706,17 +736,30 @@ export default function LessonTrailScreen({
             </Pressable>
 
             <View style={[trail.hero, darkMode && styles.darkCard]}>
-              <Text style={styles.bigEmoji}>{activeSubject.emoji}</Text>
+              {isKindergarten ? (
+                <AnimatedLearningSticker
+                  variant={learningStickerVariantForIndex(subjects.indexOf(activeSubject))}
+                  size={78}
+                />
+              ) : (
+                <AnimatedLearningSticker
+                  variant={learningStickerVariantForIndex(subjects.indexOf(activeSubject))}
+                  size={64}
+                />
+              )}
               <Text style={[styles.label, darkMode && styles.darkMutedText]}>{gradeLabel} online lessons</Text>
               <Text style={[styles.heroTitle, darkMode && styles.darkText]}>{activeSubject.title}</Text>
               <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>Choose a lesson, learn the idea, then play its minigame.</Text>
-              <Text style={[styles.starsText, darkMode && styles.darkText]}>
-                ⭐ {doneCount(activeSubject)} / {total} lessons done
-              </Text>
+              <View style={trail.progressSummary}>
+                <AnimatedLearningSticker variant="coin" size={28} />
+                <Text style={[styles.starsText, darkMode && styles.darkText]}>
+                  {doneCount(activeSubject)} / {total} lessons done
+                </Text>
+              </View>
             </View>
 
             <View style={trail.headerRow}>
-              <Text style={trail.flag}>🚩</Text>
+              <AnimatedLearningSticker variant="plant" size={34} />
               <Text style={[trail.headerText, darkMode && styles.darkText]}>Your {activeSubject.title} adventure</Text>
             </View>
 
@@ -764,17 +807,26 @@ export default function LessonTrailScreen({
                       darkMode && !unlocked && styles.darkLockedLessonCard,
                     ]}
                   >
+                    <StorybookPicture
+                      label={lesson.title}
+                      emoji={lesson.emoji}
+                      size={48}
+                    />
                     <View style={trail.cardBody}>
                       <Text style={[trail.status, darkMode && styles.darkMutedText, done && trail.statusDone, !unlocked && trail.statusLocked]}>
                         {status}
                       </Text>
                       <Text style={[trail.cardTitle, darkMode && styles.darkText, !unlocked && trail.cardTitleLocked]}>
-                        {lesson.emoji} Lesson {index + 1}: {lesson.title}
+                        Lesson {index + 1}: {lesson.title}
                       </Text>
                       <Text style={[trail.gameLine, darkMode && styles.darkMutedText]}>Lesson + minigame: {lesson.gameName}</Text>
                       <Text style={[trail.cardBlurb, darkMode && styles.darkMutedText]}>{lesson.blurb}</Text>
                     </View>
-                    <Text style={trail.cardIcon}>{!unlocked ? "🔒" : done ? "⭐" : "›"}</Text>
+                    <AnimatedLearningSticker
+                      variant={done ? "coin" : learningStickerVariantForIndex(index + 1)}
+                      size={34}
+                      style={trail.cardSticker}
+                    />
                   </Pressable>
                 </View>
               );
@@ -783,15 +835,15 @@ export default function LessonTrailScreen({
             <View style={trail.row}>
               <View style={trail.rail}>
                 <View style={[trail.node, allDone && trail.nodeDone]}>
-                  <Text style={trail.nodeFlag}>🏁</Text>
+                  <AnimatedLearningSticker variant="coin" size={24} />
                 </View>
               </View>
               <View style={[trail.card, trail.badgeCard, darkMode && styles.darkCard, !allDone && trail.cardLocked, darkMode && !allDone && styles.darkLockedLessonCard]}>
                 <View style={trail.cardBody}>
                   <Text style={[trail.cardTitle, darkMode && styles.darkText, !allDone && trail.cardTitleLocked]}>
                     {allDone
-                      ? "🏅 Subject badge earned!"
-                      : `🏅 Finish all ${total} lessons to earn the subject badge`}
+                      ? "Subject badge earned!"
+                      : `Finish all ${total} lessons to earn the subject badge`}
                   </Text>
                 </View>
               </View>
@@ -809,7 +861,7 @@ export default function LessonTrailScreen({
           <Text style={styles.backBtnText}>Back</Text>
         </Pressable>
         <View style={[styles.hero, darkMode && styles.darkCard]}>
-          <Text style={styles.bigEmoji}>🌈</Text>
+          <AnimatedLearningSticker variant="owl" size={78} />
           <Text style={[styles.label, darkMode && styles.darkMutedText]}>{gradeLabel} online lessons</Text>
           <Text style={[styles.heroTitle, darkMode && styles.darkText]}>Choose an adventure</Text>
           <Text style={[styles.heroSub, darkMode && styles.darkMutedText]}>
@@ -823,10 +875,14 @@ export default function LessonTrailScreen({
             onPress={() => setView({ kind: "lessons", subjectId: subject.id })}
             style={[styles.card, darkMode && styles.darkCard]}
           >
-            <Text style={styles.cardEmoji}>{subject.emoji}</Text>
+            <StorybookPicture
+              label={subject.title}
+              emoji={subject.emoji}
+              size={62}
+            />
             <Text style={[styles.cardTitle, darkMode && styles.darkText]}>{subject.title}</Text>
             <Text style={[styles.meta, darkMode && styles.darkMutedText]}>
-              {subject.lessons.length} lessons · ⭐ {doneCount(subject)}/{subject.lessons.length} →
+              {subject.lessons.length} lessons · {doneCount(subject)}/{subject.lessons.length} complete
             </Text>
           </Pressable>
         ))}
@@ -879,6 +935,7 @@ const trail = StyleSheet.create({
   cardLocked: { backgroundColor: "#EEF3F4" },
   badgeCard: { borderColor: "#F3C451", borderWidth: 2 },
   cardBody: { flex: 1 },
+  cardSticker: { marginRight: 10 },
   status: { color: "#258EA3", fontSize: 10, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
   statusDone: { color: "#397147" },
   statusLocked: { color: "#258EA3" },
@@ -886,7 +943,7 @@ const trail = StyleSheet.create({
   cardTitleLocked: { color: "#2B4656" },
   gameLine: { color: "#36566A", fontSize: 12, fontWeight: "800", marginTop: 3 },
   cardBlurb: { color: "#4B6A7A", fontSize: 12, lineHeight: 17, marginTop: 2 },
-  cardIcon: { fontSize: 22, marginLeft: 8, color: "#258EA3", fontWeight: "900" },
+  progressSummary: { alignItems: "center", flexDirection: "row", gap: 8 },
 });
 
 // ---------- Styles (same palette as index.tsx) ----------
@@ -928,7 +985,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardLocked: { backgroundColor: "#F1F4F4", borderColor: "#D6DEDD" },
-  cardEmoji: { fontSize: 42, marginBottom: 4 },
   cardTitle: { color: "#173B53", fontSize: 17, fontWeight: "900", textAlign: "center" },
   cardBlurb: { color: "#36566A", fontSize: 14, lineHeight: 20, textAlign: "center", marginTop: 4 },
   lessonNumber: { color: "#4B6A7A", fontSize: 12, fontWeight: "800", marginBottom: 2 },
@@ -973,6 +1029,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
+  gameCardTitle: { alignItems: "center", flexDirection: "row", gap: 8 },
   primaryBtn: {
     alignItems: "center",
     justifyContent: "center",
@@ -1019,7 +1076,7 @@ const styles = StyleSheet.create({
   art: { fontSize: 44, textAlign: "center", marginBottom: 8 },
   question: { color: "#173B53", fontSize: 19, fontWeight: "900", lineHeight: 26, textAlign: "center" },
   optionBtn: {
-    alignItems: "center",
+    alignItems: "stretch",
     justifyContent: "center",
     minHeight: 58,
     backgroundColor: "#FFF0AA",
@@ -1029,6 +1086,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginBottom: 10,
   },
+  choiceContent: { alignItems: "center", flexDirection: "row", gap: 12 },
   optionRight: { backgroundColor: "#D5F5EB", borderColor: "#66CBB1" },
   optionWrong: { backgroundColor: "#FFDCCF", borderColor: "#F2A28B" },
   optionText: { color: "#173B53", fontSize: 20, fontWeight: "900" },
@@ -1123,7 +1181,6 @@ const styles = StyleSheet.create({
   },
   instructionList: { alignSelf: "stretch", gap: 12, marginTop: 18 },
   instructionRow: { alignItems: "center", flexDirection: "row", gap: 12 },
-  instructionIcon: { fontSize: 24, width: 32, textAlign: "center" },
   instructionText: { color: "#36566A", flex: 1, fontSize: 15, fontWeight: "700", lineHeight: 21 },
   modalPlayButton: {
     alignItems: "center",

@@ -11,7 +11,10 @@ import {
 } from "../data/learningContent";
 import { awardModuleBadge } from "../data/badges";
 import { playFeedback } from "../utils/soundEffects";
-import AnimatedLearningSticker from "./AnimatedLearningSticker";
+import AnimatedLearningSticker, {
+  learningStickerVariantForIndex,
+} from "./AnimatedLearningSticker";
+import StorybookPicture from "./StorybookPicture";
 import { AppAppearanceContext } from "./CloudBackdrop";
 
 type Question = {
@@ -180,10 +183,11 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
 
         <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>Choose the correct answer:</Text>
         <View style={styles.optionsGrid}>
-          {question.options.map((option) => (
+          {question.options.map((option, optionIndex) => (
             <Pressable
               key={option}
               accessibilityRole="button"
+              celebrateOnPress
              accessibilityState={{ selected: selected === option, disabled: checked || lessonLocked }}
              disabled={checked || lessonLocked}
               soundEffect="select"
@@ -194,6 +198,10 @@ export default function QuizScreen({ category, difficulty, onBack, onFinish }: P
                 pressed && styles.pressed,
               ]}
             >
+              <StorybookPicture
+                label={option}
+                size={30}
+              />
               <Text style={[styles.optionText, darkMode && styles.darkText]}>{option}</Text>
             </Pressable>
           ))}
@@ -318,6 +326,9 @@ const styles = StyleSheet.create({
     width: "47%",
     minHeight: 58,
     alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 6,
     justifyContent: "center",
     borderRadius: 14,
     borderWidth: 2,
@@ -328,6 +339,9 @@ const styles = StyleSheet.create({
     width: "47%",
     minHeight: 58,
     alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 6,
     justifyContent: "center",
     borderRadius: 14,
     borderWidth: 2,
@@ -338,6 +352,9 @@ const styles = StyleSheet.create({
     width: "47%",
     minHeight: 58,
     alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 6,
     justifyContent: "center",
     borderRadius: 14,
     borderWidth: 2,
@@ -348,6 +365,9 @@ const styles = StyleSheet.create({
     width: "47%",
     minHeight: 58,
     alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 6,
     justifyContent: "center",
     borderRadius: 14,
     borderWidth: 2,

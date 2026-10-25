@@ -291,11 +291,11 @@ export default function AccountSettingsScreen({
         </View>
 
         <View style={[styles.section, darkMode && styles.darkSection]}>
-          <Text style={styles.sectionTitle}>🌙  APPEARANCE</Text>
-          <View style={styles.preferenceRow}>
+          <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>🌙  APPEARANCE</Text>
+          <View style={[styles.preferenceRow, darkMode && styles.darkPreferenceRow]}>
             <View style={styles.preferenceCopy}>
-              <Text style={styles.bodyLabel}>Dark mode</Text>
-              <Text style={styles.hint}>
+              <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>Dark mode</Text>
+              <Text style={[styles.hint, darkMode && styles.darkHint]}>
                 Switch LearnBridge to a starry night sky.
               </Text>
             </View>
@@ -310,24 +310,28 @@ export default function AccountSettingsScreen({
         </View>
 
         <View style={[styles.section, darkMode && styles.darkSection]}>
-          <Text style={styles.sectionTitle}>👨‍👩‍👧  ACCOUNT</Text>
-          <Text style={styles.bodyLabel}>Parent / guardian email</Text>
-          <Text style={styles.valueText}>{email || "Not available"}</Text>
+          <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>👨‍👩‍👧  ACCOUNT</Text>
+          <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>Parent / guardian email</Text>
+          <Text style={[styles.valueText, darkMode && styles.darkText]}>{email || "Not available"}</Text>
           <Pressable
             accessibilityRole="button"
             disabled={isSendingReset || !email}
             onPress={() => void handleResetPassword()}
-            style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.actionButton,
+              darkMode && styles.darkActionButton,
+              pressed && styles.pressed,
+            ]}
           >
             <Text style={styles.actionText}>
               {isSendingReset ? "Sending verification link..." : "Change Password"}
             </Text>
           </Pressable>
-          <Text style={styles.hint}>A link sent to your email verifies the change.</Text>
+          <Text style={[styles.hint, darkMode && styles.darkHint]}>A link sent to your email verifies the change.</Text>
         </View>
 
         <View style={[styles.section, darkMode && styles.darkSection]}>
-          <Text style={styles.sectionTitle}>CHILD PROFILES</Text>
+          <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>CHILD PROFILES</Text>
           {profiles.map((profile) => {
             const isActive = profile.id === activeProfileId;
             return (
@@ -336,12 +340,17 @@ export default function AccountSettingsScreen({
                   accessibilityRole="button"
                   accessibilityState={{ selected: isActive }}
                   onPress={() => onSelectProfile(profile.id)}
-                  style={[styles.profileRow, isActive && styles.profileRowSelected]}
+                  style={[
+                    styles.profileRow,
+                    isActive && styles.profileRowSelected,
+                    darkMode && styles.darkProfileRow,
+                    darkMode && isActive && styles.darkProfileRowSelected,
+                  ]}
                 >
                   <Text style={styles.profileIcon}>{profile.selectedIcon}</Text>
                   <View style={styles.profileCopy}>
-                    <Text style={styles.profileName}>{profile.childName}</Text>
-                    <Text style={styles.hint}>
+                    <Text style={[styles.profileName, darkMode && styles.darkText]}>{profile.childName}</Text>
+                    <Text style={[styles.hint, darkMode && styles.darkHint]}>
                       Age {getAgeFromParts(
                         profile.childBirthdate.slice(5, 7),
                         profile.childBirthdate.slice(8, 10),
@@ -349,10 +358,10 @@ export default function AccountSettingsScreen({
                       ) ?? "Not set"} · {profile.grade ? gradeLabels[profile.grade] : "Grade not set"}
                     </Text>
                   </View>
-                  {isActive && <Text style={styles.activeLabel}>ACTIVE</Text>}
+                  {isActive && <Text style={[styles.activeLabel, darkMode && styles.darkActiveLabel]}>ACTIVE</Text>}
                 </Pressable>
                 <View style={styles.profileGradeEditor}>
-                  <Text style={styles.bodyLabel}>Grade level for {profile.childName}</Text>
+                  <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>Grade level for {profile.childName}</Text>
                   <View style={styles.gradeRow}>
                     {(Object.keys(gradeLabels) as Grade[]).map((grade) => {
                       const selected = profile.grade === grade;
@@ -370,11 +379,16 @@ export default function AccountSettingsScreen({
                           }}
                           style={[
                             styles.gradeOption,
+                            darkMode && styles.darkOption,
                             selected && styles.gradeOptionSelected,
                             savingGradeProfileId !== null && styles.disabled,
                           ]}
                         >
-                          <Text style={[styles.gradeOptionText, selected && styles.gradeOptionTextSelected]}>
+                          <Text style={[
+                            styles.gradeOptionText,
+                            darkMode && styles.darkText,
+                            selected && styles.gradeOptionTextSelected,
+                          ]}>
                             {gradeLabels[grade]}
                           </Text>
                         </Pressable>
@@ -382,7 +396,7 @@ export default function AccountSettingsScreen({
                     })}
                   </View>
                   {savingGradeProfileId === profile.id ? (
-                    <Text accessibilityLiveRegion="polite" style={styles.hint}>
+                    <Text accessibilityLiveRegion="polite" style={[styles.hint, darkMode && styles.darkHint]}>
                       Saving grade...
                     </Text>
                   ) : null}
@@ -394,21 +408,21 @@ export default function AccountSettingsScreen({
             <Pressable
               accessibilityRole="button"
               onPress={() => setShowAddProfile(true)}
-              style={styles.outlineButton}
+              style={[styles.outlineButton, darkMode && styles.darkOutlineButton]}
             >
-              <Text style={styles.outlineButtonText}>＋  Add Child Profile</Text>
+              <Text style={[styles.outlineButtonText, darkMode && styles.darkText]}>＋  Add Child Profile</Text>
             </Pressable>
           ) : (
-            <View style={styles.addProfileForm}>
-              <Text style={styles.bodyLabel}>Child's name</Text>
+            <View style={[styles.addProfileForm, darkMode && styles.darkSubPanel]}>
+              <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>Child's name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, darkMode && styles.darkInput]}
                 value={newName ?? ""}
                 onChangeText={setNewName}
                 placeholder="Name"
-                placeholderTextColor="#6B7280"
+                placeholderTextColor={darkMode ? "#B9C5D8" : "#6B7280"}
               />
-              <Text style={[styles.bodyLabel, styles.dateLabel]}>Birthdate</Text>
+              <Text style={[styles.bodyLabel, styles.dateLabel, darkMode && styles.darkText]}>Birthdate</Text>
               <View style={styles.dateRow}>
                 {([
                   ["Month", month, setMonth, 2],
@@ -416,21 +430,21 @@ export default function AccountSettingsScreen({
                   ["Year", year, setYear, 4],
                 ] as const).map(([label, value, setValue, maxLength]) => (
                   <View key={label} style={styles.datePart}>
-                    <Text style={styles.datePartLabel}>{label}</Text>
+                    <Text style={[styles.datePartLabel, darkMode && styles.darkHint]}>{label}</Text>
                     <TextInput
                       accessibilityLabel={`Birthdate ${label.toLowerCase()}`}
-                      style={[styles.input, styles.dateInput]}
+                      style={[styles.input, styles.dateInput, darkMode && styles.darkInput]}
                       value={value ?? ""}
                       onChangeText={(next) => updateDatePart(label.toLowerCase() as "month" | "day" | "year", next)}
                       keyboardType="number-pad"
                       maxLength={maxLength}
                       placeholder={label === "Year" ? "YYYY" : label === "Month" ? "MM" : "DD"}
-                      placeholderTextColor="#6B7280"
+                      placeholderTextColor={darkMode ? "#B9C5D8" : "#6B7280"}
                     />
                   </View>
                 ))}
               </View>
-              <Text style={[styles.bodyLabel, styles.dateLabel]}>Child's grade</Text>
+              <Text style={[styles.bodyLabel, styles.dateLabel, darkMode && styles.darkText]}>Child's grade</Text>
               <View style={styles.gradeRow}>
                 {(Object.keys(gradeLabels) as Grade[]).map((value) => {
                   const selected = grade === value;
@@ -440,16 +454,24 @@ export default function AccountSettingsScreen({
                       accessibilityRole="button"
                       accessibilityState={{ selected }}
                       onPress={() => setGrade(value)}
-                      style={[styles.gradeOption, selected && styles.gradeOptionSelected]}
+                      style={[
+                        styles.gradeOption,
+                        darkMode && styles.darkOption,
+                        selected && styles.gradeOptionSelected,
+                      ]}
                     >
-                      <Text style={[styles.gradeOptionText, selected && styles.gradeOptionTextSelected]}>
+                      <Text style={[
+                        styles.gradeOptionText,
+                        darkMode && styles.darkText,
+                        selected && styles.gradeOptionTextSelected,
+                      ]}>
                         {gradeLabels[value]}
                       </Text>
                     </Pressable>
                   );
                 })}
               </View>
-              <Text style={[styles.bodyLabel, styles.dateLabel]}>Choose an icon</Text>
+              <Text style={[styles.bodyLabel, styles.dateLabel, darkMode && styles.darkText]}>Choose an icon</Text>
               <View style={styles.iconRow}>
                 {profileIcons.map((option) => (
                   <Pressable
@@ -457,21 +479,29 @@ export default function AccountSettingsScreen({
                     accessibilityRole="button"
                     accessibilityState={{ selected: icon === option }}
                     onPress={() => setIcon(option)}
-                    style={[styles.iconOption, icon === option && styles.iconOptionSelected]}
+                    style={[
+                      styles.iconOption,
+                      darkMode && styles.darkOption,
+                      icon === option && styles.iconOptionSelected,
+                    ]}
                   >
                     <Text style={styles.iconOptionText}>{option}</Text>
                   </Pressable>
                 ))}
               </View>
-              {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
+              {profileError ? <Text style={[styles.errorText, darkMode && styles.darkErrorText]}>{profileError}</Text> : null}
               <View style={styles.formActions}>
                 <Pressable onPress={() => setShowAddProfile(false)} style={styles.cancelButton}>
-                  <Text style={styles.cancelText}>Cancel</Text>
+                  <Text style={[styles.cancelText, darkMode && styles.darkHint]}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   disabled={isSavingProfile}
                   onPress={() => void handleAddProfile()}
-                  style={[styles.actionButton, isSavingProfile && styles.disabled]}
+                  style={[
+                    styles.actionButton,
+                    darkMode && styles.darkActionButton,
+                    isSavingProfile && styles.disabled,
+                  ]}
                 >
                   <Text style={styles.actionText}>{isSavingProfile ? "Saving..." : "Save Profile"}</Text>
                 </Pressable>
@@ -481,8 +511,8 @@ export default function AccountSettingsScreen({
         </View>
 
         <View style={[styles.section, darkMode && styles.darkSection]}>
-          <Text style={styles.sectionTitle}>📚  LEARNING</Text>
-          <Text style={styles.bodyLabel}>Difficulty</Text>
+          <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>📚  LEARNING</Text>
+          <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>Difficulty</Text>
           <View style={styles.segmentRow}>
             {difficulties.map(({ value, label }) => {
               const selected = preferences.difficulty === value;
@@ -492,21 +522,29 @@ export default function AccountSettingsScreen({
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                   onPress={() => updatePreference("difficulty", value)}
-                  style={[styles.segment, selected && styles.segmentSelected]}
+                  style={[
+                    styles.segment,
+                    darkMode && styles.darkOption,
+                    selected && styles.segmentSelected,
+                  ]}
                 >
-                  <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>
+                  <Text style={[
+                    styles.segmentText,
+                    darkMode && styles.darkText,
+                    selected && styles.segmentTextSelected,
+                  ]}>
                     {label}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
-          <Text style={styles.hint}>
+          <Text style={[styles.hint, darkMode && styles.darkHint]}>
             Difficulty changes the number of questions, answer choices, and passing score in online lessons and quizzes.
           </Text>
           <View style={styles.screenTimeBlock}>
-            <Text style={styles.bodyLabel}>Daily screen time limit</Text>
-            <Text style={styles.hint}>
+            <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>Daily screen time limit</Text>
+            <Text style={[styles.hint, darkMode && styles.darkHint]}>
               {preferences.screenTimeLimitMinutes === 0
                 ? `Today: ${formatDuration(screenTimeUsedSeconds)} used. No daily limit is set.`
                 : `Today: ${formatDuration(screenTimeUsedSeconds)} used · ${formatDuration(Math.max(0, preferences.screenTimeLimitMinutes * 60 - screenTimeUsedSeconds))} remaining.`}
@@ -520,23 +558,31 @@ export default function AccountSettingsScreen({
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
                     onPress={() => updatePreference("screenTimeLimitMinutes", minutes)}
-                    style={[styles.limitOption, selected && styles.limitOptionSelected]}
+                    style={[
+                      styles.limitOption,
+                      darkMode && styles.darkOption,
+                      selected && styles.limitOptionSelected,
+                    ]}
                   >
-                    <Text style={[styles.limitOptionText, selected && styles.limitOptionTextSelected]}>
+                    <Text style={[
+                      styles.limitOptionText,
+                      darkMode && styles.darkText,
+                      selected && styles.limitOptionTextSelected,
+                    ]}>
                       {minutes === 0 ? "No limit" : `${minutes} min`}
                     </Text>
                   </Pressable>
                 );
               })}
             </View>
-            <Text style={styles.hint}>
+            <Text style={[styles.hint, darkMode && styles.darkHint]}>
               This limit applies across all grade levels. Choosing a limit also enables 5-minute eye-rest breaks every 15 active minutes; break time is not counted. Selecting No limit disables both limits and breaks. Usage resets at local midnight.
             </Text>
           </View>
-          <View style={styles.preferenceRow}>
+          <View style={[styles.preferenceRow, darkMode && styles.darkPreferenceRow]}>
             <View style={styles.preferenceCopy}>
-              <Text style={styles.bodyLabel}>Eye-rest notifications</Text>
-              <Text style={styles.hint}>
+              <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>Eye-rest notifications</Text>
+              <Text style={[styles.hint, darkMode && styles.darkHint]}>
                 Your child gets a 5-minute break every 15 active minutes. Reminder banners require a development build; the app still works in Expo Go without them.
               </Text>
             </View>
@@ -548,10 +594,10 @@ export default function AccountSettingsScreen({
               trackColor={{ false: "#B9B2A8", true: "#759B57" }}
             />
           </View>
-          <View style={styles.preferenceRow}>
+          <View style={[styles.preferenceRow, darkMode && styles.darkPreferenceRow]}>
             <View style={styles.preferenceCopy}>
-              <Text style={styles.bodyLabel}>Offline-only mode</Text>
-              <Text style={styles.hint}>Shows local offline missions instead of lessons.</Text>
+              <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>Offline-only mode</Text>
+              <Text style={[styles.hint, darkMode && styles.darkHint]}>Shows local offline missions instead of lessons.</Text>
             </View>
             <Switch
               accessibilityLabel="Enable offline-only mode"
@@ -563,11 +609,11 @@ export default function AccountSettingsScreen({
         </View>
 
         <View style={[styles.section, darkMode && styles.darkSection]}>
-          <Text style={styles.sectionTitle}>🛡️  DATA & PRIVACY</Text>
-          <View style={styles.preferenceRow}>
+          <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>🛡️  DATA & PRIVACY</Text>
+          <View style={[styles.preferenceRow, darkMode && styles.darkPreferenceRow]}>
             <View style={styles.preferenceCopy}>
-              <Text style={styles.bodyLabel}>Privacy mode</Text>
-              <Text style={styles.hint}>Hide the active child's name and age on screen.</Text>
+              <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>Privacy mode</Text>
+              <Text style={[styles.hint, darkMode && styles.darkHint]}>Hide the active child's name and age on screen.</Text>
             </View>
             <Switch
               accessibilityLabel="Enable privacy mode"
@@ -576,20 +622,20 @@ export default function AccountSettingsScreen({
               trackColor={{ false: "#B9B2A8", true: "#759B57" }}
             />
           </View>
-          <View style={styles.disclosure}>
-            <Text style={styles.bodyLabel}>What is stored</Text>
-            <Text style={styles.hint}>
-              Firebase manages the parent account email, password, and sign-in session. On this device, LearnBridge stores child names, birthdates, icons, preferences, completed lesson IDs, and lesson mistake counts in app storage. Mistakes and completion progress remain available offline between app launches. Earned module badges are also saved locally.
+          <View style={[styles.disclosure, darkMode && styles.darkSubPanel]}>
+            <Text style={[styles.bodyLabel, darkMode && styles.darkText]}>What is stored</Text>
+            <Text style={[styles.hint, darkMode && styles.darkHint]}>
+              Firebase manages the parent account email, password, and sign-in session. LearnBridge keeps a local copy of child profiles, preferences, lesson completions, and mistake counts so they remain available offline. Child profiles and lesson progress also sync to your Firebase account when online. Earned module badges are saved locally.
             </Text>
           </View>
           <Pressable
             accessibilityRole="button"
             onPress={onClearProgress}
-            style={styles.clearButton}
+            style={[styles.clearButton, darkMode && styles.darkClearButton]}
           >
-            <Text style={styles.clearButtonText}>Clear Learning Progress</Text>
+            <Text style={[styles.clearButtonText, darkMode && styles.darkClearButtonText]}>Clear Learning Progress</Text>
           </Pressable>
-          <Text style={styles.hint}>Clears current quiz results and progress only. Account and child profiles stay intact.</Text>
+          <Text style={[styles.hint, darkMode && styles.darkHint]}>Clears current quiz results and progress only. Account and child profiles stay intact.</Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -601,7 +647,7 @@ export default function AccountSettingsScreen({
           >
             <Text style={styles.deleteAccountButtonText}>Delete Account</Text>
           </Pressable>
-          <Text style={styles.hint}>Requires the parent account password. This permanently deletes the account and child profiles.</Text>
+          <Text style={[styles.hint, darkMode && styles.darkHint]}>Requires the parent account password. This permanently deletes the account and child profiles.</Text>
         </View>
       </ScrollView>
       <Modal
@@ -612,24 +658,24 @@ export default function AccountSettingsScreen({
           if (!isDeletingAccount) setShowDeleteConfirmation(false);
         }}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Verify parent to delete account</Text>
-            <Text style={styles.modalMessage}>
+        <View style={[styles.modalBackdrop, darkMode && styles.darkModalBackdrop]}>
+          <View style={[styles.modalCard, darkMode && styles.darkModalCard]}>
+            <Text style={[styles.modalTitle, darkMode && styles.darkText]}>Verify parent to delete account</Text>
+            <Text style={[styles.modalMessage, darkMode && styles.darkHint]}>
               This permanently deletes {email || "the parent account"} and its child profiles. Enter the parent account password to continue.
             </Text>
             <TextInput
               accessibilityLabel="Parent account password"
-              style={styles.input}
+              style={[styles.input, darkMode && styles.darkInput]}
               value={deletePassword}
               onChangeText={setDeletePassword}
               placeholder="Parent account password"
-              placeholderTextColor="#6B7280"
+              placeholderTextColor={darkMode ? "#B9C5D8" : "#6B7280"}
               secureTextEntry
               autoCapitalize="none"
               editable={!isDeletingAccount}
             />
-            {deleteError ? <Text style={styles.errorText}>{deleteError}</Text> : null}
+            {deleteError ? <Text style={[styles.errorText, darkMode && styles.darkErrorText]}>{deleteError}</Text> : null}
             <View style={styles.modalActions}>
               <Pressable
                 accessibilityRole="button"
@@ -637,7 +683,7 @@ export default function AccountSettingsScreen({
                 onPress={() => setShowDeleteConfirmation(false)}
                 style={styles.cancelButton}
               >
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={[styles.cancelText, darkMode && styles.darkHint]}>Cancel</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -737,7 +783,21 @@ const styles = StyleSheet.create({
   deleteConfirmButton: { minHeight: 44, backgroundColor: "#8C2D24", borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   deleteConfirmText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
   pressed: { opacity: 0.7 },
-  darkSection: { backgroundColor: "#DCE3EC", borderColor: "#BBC7D5" },
+  darkSection: { backgroundColor: "#253149", borderColor: "#465671" },
   darkText: { color: "#F3F4FF" },
   darkHint: { color: "#C4CBE0" },
+  darkSubPanel: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkInput: { backgroundColor: "#202B40", borderColor: "#66758E", color: "#F3F4FF" },
+  darkOption: { backgroundColor: "#303D55", borderColor: "#66758E" },
+  darkPreferenceRow: { borderBottomColor: "#465671" },
+  darkProfileRow: { borderBottomColor: "#465671" },
+  darkProfileRowSelected: { backgroundColor: "#303D55" },
+  darkActiveLabel: { color: "#A7E2BC" },
+  darkOutlineButton: { borderColor: "#A7E2BC" },
+  darkActionButton: { backgroundColor: "#456C7B" },
+  darkClearButton: { borderColor: "#FF9F94" },
+  darkClearButtonText: { color: "#FFB4AA" },
+  darkErrorText: { color: "#FFAAA2" },
+  darkModalBackdrop: { backgroundColor: "rgba(5, 10, 24, 0.82)" },
+  darkModalCard: { backgroundColor: "#253149", borderWidth: 1, borderColor: "#465671" },
 });

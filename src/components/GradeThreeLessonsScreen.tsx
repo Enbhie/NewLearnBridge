@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
-  Animated,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -9,7 +8,10 @@ import {
   View,
 } from "react-native";
 import { AnimatedPressable as Pressable } from "./AnimatedPressable";
-import AnimatedLearningSticker from "./AnimatedLearningSticker";
+import AnimatedLearningSticker, {
+  learningStickerVariantForIndex,
+} from "./AnimatedLearningSticker";
+import StorybookPicture from "./StorybookPicture";
 import { awardModuleBadge } from "../data/badges";
 import { playFeedback } from "../utils/soundEffects";
 import GradeThreeMathScreen from "../data/MathematicsCurriculum";
@@ -80,24 +82,6 @@ type Props = {
   onCompleteLesson: (lessonId: string) => void;
   onRecordMistake: (lessonId: string) => void;
 };
-
-function FloatingEmoji({ emoji, style }: { emoji: string; style?: object }) {
-  const offset = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(offset, { toValue: -6, duration: 700, useNativeDriver: true }),
-        Animated.timing(offset, { toValue: 6, duration: 700, useNativeDriver: true }),
-        Animated.timing(offset, { toValue: 0, duration: 700, useNativeDriver: true }),
-      ])
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [offset]);
-
-  return <Animated.Text style={[style, { transform: [{ translateY: offset }] }]}>{emoji}</Animated.Text>;
-}
 
 export default function GradeThreeLessonsScreen({
   onBack,
@@ -550,7 +534,10 @@ export default function GradeThreeLessonsScreen({
               <AnimatedLearningSticker variant="owl" size={92} />
             </View>
 
-            <Text style={styles.sectionTitle}>📚 Explore Your Subjects</Text>
+            <View style={styles.subjectSectionHeading}>
+              <AnimatedLearningSticker variant="owl" size={36} />
+              <Text style={styles.sectionTitle}>Explore Your Subjects</Text>
+            </View>
             <View style={styles.subjectGrid}>
               {subjects.map((subject) => (
                 <Pressable
@@ -564,8 +551,8 @@ export default function GradeThreeLessonsScreen({
                     setSelectedSubject(subject);
                   }}
                   style={[styles.subjectCard, { backgroundColor: subject.color }]}
-                >
-                  <FloatingEmoji emoji={subject.emoji} style={styles.subjectEmoji} />
+                  >
+                    <StorybookPicture label={subject.name} size={60} />
                   <Text style={styles.subjectName}>{subject.name}</Text>
                   <Text style={styles.subjectDescription}>
                     {subject.name === "English"
@@ -656,7 +643,7 @@ export default function GradeThreeLessonsScreen({
                 <Text style={styles.backButtonText}>← Back to Subjects</Text>
               </Pressable>
               <View style={styles.subjectHeading}>
-                <FloatingEmoji emoji="🔬" style={styles.subjectHeadingEmoji} />
+                <AnimatedLearningSticker variant="plant" size={48} />
                 <View style={styles.subjectHeadingCopy}>
                   <Text style={styles.subjectHeadingTitle}>
                     Science Adventure
@@ -686,16 +673,23 @@ export default function GradeThreeLessonsScreen({
                     >
                       <Text style={styles.lessonNumber}>{index + 1}</Text>
                       <View style={styles.lessonCopy}>
-                        <Text style={styles.lessonName}>
-                          {lesson.emoji} {lesson.title}
-                        </Text>
+                        <View style={styles.lessonNameRow}>
+                          <StorybookPicture label={lesson.title} size={34} />
+                          <Text style={styles.lessonName}>{lesson.title}</Text>
+                        </View>
                         <Text style={styles.mutedText}>
                           {lesson.activities.length} activities
                         </Text>
                       </View>
-                      <Text style={styles.lessonArrow}>
-                        {complete ? "Replay" : unlocked ? "Start →" : "🔒 Locked"}
-                      </Text>
+                      <View style={styles.lessonAction}>
+                        <Text style={styles.lessonArrow}>
+                          {complete ? "Replay" : unlocked ? "Start" : "Locked"}
+                        </Text>
+                        <AnimatedLearningSticker
+                          variant={complete ? "coin" : unlocked ? "plant" : "owl"}
+                          size={30}
+                        />
+                      </View>
                     </Pressable>
                   );
                 })}
@@ -711,17 +705,22 @@ export default function GradeThreeLessonsScreen({
                 >
                   <Text style={styles.backButtonText}>← All Lessons</Text>
                 </Pressable>
-                <Text style={styles.scienceScorePill}>
-                  ⭐ Score: {scienceScore}
-                </Text>
+                <View style={styles.scorePillRow}>
+                  <AnimatedLearningSticker variant="coin" size={26} />
+                  <Text style={styles.scienceScorePill}>Score: {scienceScore}</Text>
+                </View>
               </View>
               <View style={styles.scienceHeader}>
                 <Text style={styles.scienceEyebrow}>
                   LEARN · PLAY · DISCOVER
                 </Text>
-                <Text style={styles.scienceTitle}>
-                  {scienceLesson.emoji} {scienceLesson.title}
-                </Text>
+                <View style={styles.lessonNameRow}>
+                  <AnimatedLearningSticker
+                    variant={learningStickerVariantForIndex(scienceLessonIndex ?? 0)}
+                    size={40}
+                  />
+                  <Text style={styles.scienceTitle}>{scienceLesson.title}</Text>
+                </View>
                 <Text style={styles.bodyText}>
                   Explore the world one activity at a time!
                 </Text>
@@ -760,6 +759,7 @@ export default function GradeThreeLessonsScreen({
                     return (
                       <Pressable
                         accessibilityRole="button"
+                        celebrateOnPress
                         accessibilityState={{
                           selected: isSelected,
                           disabled: scienceChecked,
@@ -779,6 +779,10 @@ export default function GradeThreeLessonsScreen({
                             styles.quizOptionIncorrect,
                         ]}
                       >
+                        <StorybookPicture
+                          label={option}
+                          size={32}
+                        />
                         <Text style={styles.quizOptionText}>
                           {option}
                           {scienceChecked && isCorrect ? "  ✓" : ""}
@@ -798,8 +802,8 @@ export default function GradeThreeLessonsScreen({
                     accessibilityLiveRegion="polite"
                   >
                     {scienceSelectedAnswer === scienceQuestion.answer
-                      ? `🎉 Correct! ${scienceQuestion.explain}`
-                      : `💪 Good try! ${scienceQuestion.explain}`}
+                      ? `Correct! ${scienceQuestion.explain}`
+                      : `Good try! ${scienceQuestion.explain}`}
                   </Text>
                 ) : null}
                 <View style={styles.scienceActions}>
@@ -821,7 +825,7 @@ export default function GradeThreeLessonsScreen({
                             ? "Next Question →"
                             : scienceActivityIndex + 1 < scienceLesson.activities.length
                               ? "Next Activity →"
-                              : "Finish Lesson 🎉"
+                              : "Finish Lesson"
                           : "✓ Check Answer"}
                       </Text>
                     </Pressable>
@@ -896,7 +900,7 @@ export default function GradeThreeLessonsScreen({
                 <Text style={styles.backButtonText}>← Back to Subjects</Text>
               </Pressable>
               <View style={styles.subjectHeading}>
-                <FloatingEmoji emoji="🏃" style={styles.subjectHeadingEmoji} />
+                <AnimatedLearningSticker variant="coin" size={48} />
                 <View style={styles.subjectHeadingCopy}>
                   <Text style={styles.subjectHeadingTitle}>
                     Health/PE Adventure
@@ -926,16 +930,26 @@ export default function GradeThreeLessonsScreen({
                     >
                       <Text style={styles.lessonNumber}>{index + 1}</Text>
                       <View style={styles.lessonCopy}>
-                        <Text style={styles.lessonName}>
-                          {lesson.emoji} {lesson.title}
-                        </Text>
+                        <View style={styles.lessonNameRow}>
+                          <AnimatedLearningSticker
+                            variant={learningStickerVariantForIndex(index)}
+                            size={34}
+                          />
+                          <Text style={styles.lessonName}>{lesson.title}</Text>
+                        </View>
                         <Text style={styles.mutedText}>
                           {lesson.activities.length} activities
                         </Text>
                       </View>
-                      <Text style={styles.lessonArrow}>
-                        {complete ? "Replay" : unlocked ? "Start →" : "🔒 Locked"}
-                      </Text>
+                      <View style={styles.lessonAction}>
+                        <Text style={styles.lessonArrow}>
+                          {complete ? "Replay" : unlocked ? "Start" : "Locked"}
+                        </Text>
+                        <AnimatedLearningSticker
+                          variant={complete ? "coin" : unlocked ? "plant" : "owl"}
+                          size={30}
+                        />
+                      </View>
                     </Pressable>
                   );
                 })}
@@ -951,17 +965,22 @@ export default function GradeThreeLessonsScreen({
                 >
                   <Text style={styles.backButtonText}>← All Lessons</Text>
                 </Pressable>
-                <Text style={styles.scienceScorePill}>
-                  ⭐ Score: {healthScore}
-                </Text>
+                <View style={styles.scorePillRow}>
+                  <AnimatedLearningSticker variant="coin" size={26} />
+                  <Text style={styles.scienceScorePill}>Score: {healthScore}</Text>
+                </View>
               </View>
               <View style={styles.scienceHeader}>
                 <Text style={styles.scienceEyebrow}>
                   LEARN · PLAY · STAY HEALTHY
                 </Text>
-                <Text style={styles.scienceTitle}>
-                  {healthLesson.emoji} {healthLesson.title}
-                </Text>
+                <View style={styles.lessonNameRow}>
+                  <AnimatedLearningSticker
+                    variant={learningStickerVariantForIndex(healthLessonIndex ?? 0)}
+                    size={40}
+                  />
+                  <Text style={styles.scienceTitle}>{healthLesson.title}</Text>
+                </View>
                 <Text style={styles.bodyText}>
                   Make healthy choices and become a Health Hero!
                 </Text>
@@ -998,6 +1017,7 @@ export default function GradeThreeLessonsScreen({
                     return (
                       <Pressable
                         accessibilityRole="button"
+                        celebrateOnPress
                         accessibilityState={{
                           selected: isSelected,
                           disabled: healthChecked,
@@ -1017,6 +1037,10 @@ export default function GradeThreeLessonsScreen({
                             styles.quizOptionIncorrect,
                         ]}
                       >
+                        <StorybookPicture
+                          label={option}
+                          size={32}
+                        />
                         <Text style={styles.quizOptionText}>
                           {option}
                           {healthChecked && isCorrect ? "  ✓" : ""}
@@ -1036,8 +1060,8 @@ export default function GradeThreeLessonsScreen({
                     accessibilityLiveRegion="polite"
                   >
                     {healthSelectedAnswer === healthQuestion.answer
-                      ? `🎉 Correct! ${healthQuestion.explain}`
-                      : `💪 Good try! ${healthQuestion.explain}`}
+                      ? `Correct! ${healthQuestion.explain}`
+                      : `Good try! ${healthQuestion.explain}`}
                   </Text>
                 ) : null}
                 <View style={styles.scienceActions}>
@@ -1063,7 +1087,7 @@ export default function GradeThreeLessonsScreen({
                             ? "Next Question →"
                             : healthActivityIndex + 1 < healthLesson.activities.length
                               ? "Next Activity →"
-                              : "Finish Lesson 🎉"
+                              : "Finish Lesson"
                           : "✓ Check Answer"}
                       </Text>
                     </Pressable>
@@ -1083,9 +1107,11 @@ export default function GradeThreeLessonsScreen({
             </Pressable>
 
             <View style={styles.subjectHeading}>
-              <FloatingEmoji
-                emoji={selectedSubject.emoji}
-                style={styles.subjectHeadingEmoji}
+              <AnimatedLearningSticker
+                variant={learningStickerVariantForIndex(
+                  subjects.findIndex((subject) => subject.name === selectedSubject.name)
+                )}
+                size={48}
               />
               <View style={styles.subjectHeadingCopy}>
                 <Text style={styles.subjectHeadingTitle}>
@@ -1112,12 +1138,24 @@ export default function GradeThreeLessonsScreen({
                   >
                     <Text style={styles.lessonNumber}>{index + 1}</Text>
                     <View style={styles.lessonCopy}>
-                      <Text style={styles.lessonName}>{lesson.title}</Text>
+                      <View style={styles.lessonNameRow}>
+                        <AnimatedLearningSticker
+                          variant={learningStickerVariantForIndex(index)}
+                          size={34}
+                        />
+                        <Text style={styles.lessonName}>{lesson.title}</Text>
+                      </View>
                       <Text style={styles.mutedText}>{lesson.description}</Text>
                     </View>
-                    <Text style={styles.lessonArrow}>
-                      {complete ? "Replay" : unlocked ? "Start →" : "🔒 Locked"}
-                    </Text>
+                    <View style={styles.lessonAction}>
+                      <Text style={styles.lessonArrow}>
+                        {complete ? "Replay" : unlocked ? "Start" : "Locked"}
+                      </Text>
+                      <AnimatedLearningSticker
+                        variant={complete ? "coin" : unlocked ? "plant" : "owl"}
+                        size={30}
+                      />
+                    </View>
                   </Pressable>
                 );
               })}
@@ -1134,7 +1172,12 @@ export default function GradeThreeLessonsScreen({
             </Pressable>
 
             <View style={styles.lessonContent}>
-              <FloatingEmoji emoji={selectedEnglishLesson.emoji} style={styles.bigEmoji} />
+              <AnimatedLearningSticker
+                variant={learningStickerVariantForIndex(
+                  englishLessons.indexOf(selectedEnglishLesson)
+                )}
+                size={72}
+              />
               <Text style={styles.subjectLabel}>English</Text>
               <Text style={styles.lessonTitle}>
                 {selectedEnglishLesson.title}
@@ -1170,8 +1213,8 @@ export default function GradeThreeLessonsScreen({
                   <>
                     <Text style={styles.practiceTitle}>
                       {englishMistakes === 0
-                        ? "🎉 Perfect lesson!"
-                        : "💪 Try this lesson again"}
+                        ? "Perfect lesson!"
+                        : "Try this lesson again"}
                     </Text>
                     <Text style={styles.bodyText}>
                       You answered {englishScore} of {englishQuizzes.length} questions correctly, with{" "}
@@ -1229,6 +1272,7 @@ export default function GradeThreeLessonsScreen({
                         return (
                           <Pressable
                             accessibilityRole="button"
+                            celebrateOnPress
                             accessibilityState={{ selected: isSelected }}
                             disabled={quizChecked}
                             key={option}
@@ -1245,6 +1289,10 @@ export default function GradeThreeLessonsScreen({
                                 styles.quizOptionIncorrect,
                             ]}
                           >
+                            <StorybookPicture
+                              label={option}
+                              size={32}
+                            />
                             <Text style={styles.quizOptionText}>{option}</Text>
                           </Pressable>
                         );
@@ -1262,7 +1310,7 @@ export default function GradeThreeLessonsScreen({
                         accessibilityLiveRegion="polite"
                       >
                         {selectedQuizAnswer === englishQuiz.correctAnswer
-                          ? `🎉 Correct! ${englishQuiz.hint}`
+                          ? `Correct! ${englishQuiz.hint}`
                           : `Not quite. The correct answer is ${englishQuiz.correctAnswer}. ${englishQuiz.hint}`}
                       </Text>
                     ) : null}
@@ -1343,7 +1391,12 @@ export default function GradeThreeLessonsScreen({
             </Pressable>
 
             <View style={styles.lessonContent}>
-              <FloatingEmoji emoji={selectedSubject.emoji} style={styles.bigEmoji} />
+              <AnimatedLearningSticker
+                variant={learningStickerVariantForIndex(
+                  subjects.findIndex((subject) => subject.name === selectedSubject.name)
+                )}
+                size={72}
+              />
               <Text style={styles.subjectLabel}>{selectedSubject.name}</Text>
               <Text style={styles.lessonTitle}>{selectedLesson}</Text>
               <Text style={styles.bodyText}>
@@ -1352,7 +1405,7 @@ export default function GradeThreeLessonsScreen({
               </Text>
 
               <View style={styles.activityBox}>
-                <Text style={styles.activityEmoji}>⭐</Text>
+                <AnimatedLearningSticker variant="coin" size={32} />
                 <Text style={styles.activityTitle}>Learning Time!</Text>
                 <Text style={styles.bodyText}>
                   Read your lesson carefully, ask questions, and practice what
@@ -1372,7 +1425,7 @@ export default function GradeThreeLessonsScreen({
         )}
 
         <Text style={styles.footer}>
-          🌈 Keep learning, keep growing, Grade 3 superstars!
+          Keep learning, keep growing, Grade 3 superstars!
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -1455,6 +1508,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 14,
   },
+  subjectSectionHeading: { alignItems: "center", flexDirection: "row", gap: 10, marginBottom: 12 },
   subjectCard: {
     flexGrow: 1,
     flexBasis: 230,
@@ -1463,10 +1517,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 2,
     borderColor: "#FFFFFF",
-  },
-  subjectEmoji: {
-    fontSize: 38,
-    marginBottom: 8,
   },
   subjectName: {
     color: "#263654",
@@ -1548,6 +1598,7 @@ const styles = StyleSheet.create({
     color: "#263654",
     fontWeight: "700",
   },
+  lessonNameRow: { alignItems: "center", flexDirection: "row", flex: 1, gap: 10 },
   lessonCopy: {
     flex: 1,
     gap: 5,
@@ -1556,6 +1607,7 @@ const styles = StyleSheet.create({
     color: "#3155A4",
     fontWeight: "700",
   },
+  lessonAction: { alignItems: "center", flexDirection: "row", gap: 5 },
   lessonContent: {
     alignItems: "center",
     padding: 28,
@@ -1625,6 +1677,7 @@ const styles = StyleSheet.create({
     color: "#745616",
     fontWeight: "800",
   },
+  scorePillRow: { alignItems: "center", flexDirection: "row", gap: 8 },
   scienceHeader: {
     padding: 20,
     borderRadius: 18,
@@ -1851,6 +1904,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   quizOption: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
     padding: 13,
     borderRadius: 12,
     borderWidth: 2,

@@ -71,6 +71,7 @@ import { getEarnedBadges, type EarnedBadge } from "../data/badges";
 import { getCompletedMissions, markMissionComplete } from "../data/missionProgress";
 import {
     listenToMissionReview,
+    listenToRealtimeDatabaseMissionReview,
     type MissionReview,
 } from "../data/missionSubmissions";
 import {
@@ -82,16 +83,25 @@ import {
 import {
     deleteMissionSubmissionsForUser,
     getMissionSubmissions,
+    markMissionSubmissionReviewed,
     saveMissionPhotoSubmission,
     syncMissionSubmissions,
     type OfflineMissionSubmission,
 } from "../data/offlineMissionSubmissionQueue";
+import {
+  deleteLearnerProgress,
+  syncLearnerProgress,
+} from "../data/learnerProgress";
 import { auth, firebaseConfigured, firestore } from "../firebase";
 import {
     setBackgroundMusic,
     type BackgroundMusicTrack,
 } from "../utils/backgroundMusic";
-import { checkInternetConnectivity, useInternetConnectivity } from "../utils/internetConnectivity";
+import {
+  checkInternetConnectivity,
+  isDefinitelyOffline,
+  useInternetConnectivity,
+} from "../utils/internetConnectivity";
 
 let notificationsModulePromise:
   | Promise<typeof import("expo-notifications") | null>
@@ -187,10 +197,6 @@ type Mission = {
   description: string;
 };
 
-function requiresParentEmailReview(mission: OfflineMission): boolean {
-  return mission.submission === "photo";
-}
-
 const missions: Mission[] = [
   {
     id: "M1",
@@ -229,6 +235,7 @@ const SETTINGS_STORAGE_PREFIX = "learnbridge.settings.";
 const SCREEN_TIME_STORAGE_PREFIX = "learnbridge.screenTime.";
 const LESSON_PROGRESS_STORAGE_PREFIX = "learnbridge.lessonProgress.";
 const LESSON_MISTAKES_STORAGE_PREFIX = "learnbridge.lessonMistakes.";
+const LESSON_PROGRESS_CLEAR_PENDING_PREFIX = "learnbridge.lessonProgress.clearPending.";
 const EYE_BREAK_INTERVAL_SECONDS = 15 * 60;
 const EYE_BREAK_DURATION_SECONDS = 5 * 60;
 const LEGAL_POLICY_VERSION = "1.0";
@@ -332,6 +339,10 @@ function getLessonProgressStorageKey(userId: string, profileId: string): string 
 
 function getLessonMistakesStorageKey(userId: string, profileId: string): string {
   return `${LESSON_MISTAKES_STORAGE_PREFIX}${userId}.${profileId}`;
+}
+
+function getLessonProgressClearPendingKey(userId: string, profileId: string): string {
+  return `${LESSON_PROGRESS_CLEAR_PENDING_PREFIX}${userId}.${profileId}`;
 }
 
 function isLessonMistakeCounts(value: unknown): value is Record<string, number> {
@@ -483,20 +494,30 @@ function ActionButton({
   children,
   onPress,
   variant = "primary",
+  disabled = false,
 }: {
   children: string;
   onPress: () => void;
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "danger";
+  disabled?: boolean;
 }) {
   const { darkMode } = useContext(AppAppearanceContext);
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
+      disabled={disabled}
       style={({ pressed }) => [
         styles.actionButton,
         variant === "secondary" && styles.secondaryButton,
-        darkMode && (variant === "secondary" ? styles.actionButtonSecondaryDark : styles.actionButtonPrimaryDark),
+        variant === "danger" && styles.dangerButton,
+        darkMode &&
+          (variant === "danger"
+            ? styles.dangerButtonDark
+            : variant === "secondary"
+              ? styles.actionButtonSecondaryDark
+              : styles.actionButtonPrimaryDark),
+        disabled && { opacity: 0.5 },
         pressed && styles.pressed,
       ]}
     >
@@ -1591,8 +1612,11 @@ function ProfileScreen({
         <ActionButton onPress={onOpenSettings} variant="secondary">
           ACCOUNT SETTINGS
         </ActionButton>
-        <ActionButton onPress={onSignOut} variant="secondary">
-          SIGN OUT
+        <ActionButton onPress={() => setScreen("home")} variant="secondary">
+          EXIT TO TITLE
+        </ActionButton>
+        <ActionButton onPress={onSignOut} variant="danger">
+          LOG OUT
         </ActionButton>
       </ScrollView>
       <BottomNavigation screen={screen} setScreen={setScreen} />
@@ -1818,10 +1842,13 @@ function MenuScreen({
                 accessibilityRole="button"
                 style={({ pressed }) => [
                   styles.openMissionsButton,
+                  darkMode && styles.darkOpenMissionsButton,
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.openButton}>Explore missions →</Text>
+                <Text style={[styles.openButton, darkMode && styles.darkText]}>
+                  Explore missions →
+                </Text>
               </Pressable>
             </View>
           </>
@@ -1843,8 +1870,10 @@ function MenuScreen({
   })
   {
   const router = useRouter();
+  const { darkMode } = useContext(AppAppearanceContext);
   const [completed, setCompleted] = useState<string[]>([]);
   const [pending, setPending] = useState<OfflineMission | null>(null);
+  const [photoSubmissionRequired, setPhotoSubmissionRequired] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoContentType, setPhotoContentType] = useState("image/jpeg");
   const [photoError, setPhotoError] = useState("");
@@ -1854,6 +1883,7 @@ function MenuScreen({
   const [pendingReview, setPendingReview] = useState<MissionReview | null>(null);
   const [isPendingReviewDismissed, setIsPendingReviewDismissed] = useState(false);
   const [submissions, setSubmissions] = useState<OfflineMissionSubmission[]>([]);
+  const [submissionsReady, setSubmissionsReady] = useState(false);
   const [reviewError, setReviewError] = useState("");
   const [isRestoringReview, setIsRestoringReview] = useState(true);
   const restoredReviewRef = useRef(false);
@@ -1867,10 +1897,41 @@ function MenuScreen({
   const refreshSubmissions = useCallback(async () => {
     if (!userId) {
       setSubmissions([]);
+      setSubmissionsReady(true);
       return;
     }
-    setSubmissions(await getMissionSubmissions(userId));
-  }, [userId]);
+    const savedSubmissions = await getMissionSubmissions(userId);
+    setSubmissions(savedSubmissions);
+    const awaitingReview = savedSubmissions.find(
+      (submission) =>
+        submission.status === "awaiting_parent_confirmation" &&
+        Boolean(submission.databaseSubmissionId)
+    );
+    if (awaitingReview && !restoredReviewRef.current) {
+      restoredReviewRef.current = true;
+      const review: MissionReview = {
+        id: awaitingReview.id,
+        missionId: awaitingReview.missionId,
+        status: "pending",
+        source: "realtime_database",
+        databaseSubmissionId: awaitingReview.databaseSubmissionId,
+      };
+      setPendingReview(review);
+      setIsPendingReviewDismissed(false);
+      if (reviewStorageKey) {
+        void AsyncStorage.setItem(reviewStorageKey, JSON.stringify(review)).catch(
+          (error: unknown) => {
+            setReviewError(
+              error instanceof Error
+                ? `The pending parent review could not be saved on this device: ${error.message}`
+                : "The pending parent review could not be saved on this device."
+            );
+          }
+        );
+      }
+    }
+    setSubmissionsReady(true);
+  }, [reviewStorageKey, userId]);
 
   const syncSubmissions = useCallback(async () => {
     if (!userId) return;
@@ -1879,12 +1940,31 @@ function MenuScreen({
         submission,
         ...current.filter((item) => item.id !== submission.id),
       ]);
-      if (submission.status === "submitted_successfully") {
+      if (
+        submission.status === "submitted_successfully" ||
+        submission.status === "awaiting_parent_confirmation"
+      ) {
+        if (
+          submission.status === "awaiting_parent_confirmation" &&
+          !submission.databaseSubmissionId
+        ) {
+          setReviewError(
+            "The parent review link was sent, but this device is missing the database submission ID."
+          );
+          return;
+        }
         restoredReviewRef.current = true;
         const review: MissionReview = {
           id: submission.id,
           missionId: submission.missionId,
           status: "pending",
+          source:
+            submission.status === "awaiting_parent_confirmation"
+              ? "realtime_database"
+              : "firestore",
+          ...(submission.databaseSubmissionId
+            ? { databaseSubmissionId: submission.databaseSubmissionId }
+            : {}),
         };
         setPendingReview(review);
         setIsPendingReviewDismissed(false);
@@ -1925,17 +2005,16 @@ function MenuScreen({
       }
     });
     const subscription = Network.addNetworkStateListener((state) => {
-      if (state.isConnected === true) {
-        void syncSubmissions().catch((error: unknown) => {
-          if (active) {
-            setMissionError(
-              error instanceof Error
-                ? `Could not synchronize saved mission submissions: ${error.message}`
-                : "Could not synchronize saved mission submissions."
-            );
-          }
-        });
-      }
+      if (isDefinitelyOffline(state)) return;
+      void syncSubmissions().catch((error: unknown) => {
+        if (active) {
+          setMissionError(
+            error instanceof Error
+              ? `Could not synchronize saved mission submissions: ${error.message}`
+              : "Could not synchronize saved mission submissions."
+          );
+        }
+      });
     });
     return () => {
       active = false;
@@ -1979,6 +2058,13 @@ function MenuScreen({
             id: parsed.id,
             missionId: parsed.missionId,
             status: parsed.status,
+            ...(parsed.source === "realtime_database" &&
+            typeof parsed.databaseSubmissionId === "string"
+              ? {
+                  source: "realtime_database" as const,
+                  databaseSubmissionId: parsed.databaseSubmissionId,
+                }
+              : {}),
           });
         }
       })
@@ -1999,27 +2085,52 @@ function MenuScreen({
 
   useEffect(() => {
     if (!pendingReview || pendingReview.status !== "pending") return;
+    const onReview = (updatedReview: MissionReview) => {
+      if (updatedReview.status === "pending") return;
+      setPendingReview(updatedReview);
+      setReviewError("");
+      void markMissionSubmissionReviewed(updatedReview.id, updatedReview.status)
+        .then(() => refreshSubmissions())
+        .then(() => syncSubmissions())
+        .catch((error: unknown) => {
+          setReviewError(
+            error instanceof Error
+              ? `Parent decision received, but the submission status could not be updated: ${error.message}`
+              : "Parent decision received, but the submission status could not be updated."
+          );
+        });
+      if (reviewStorageKey) {
+        void AsyncStorage.setItem(reviewStorageKey, JSON.stringify(updatedReview)).catch(
+          (error: unknown) => {
+            setReviewError(
+              error instanceof Error
+                ? `Parent decision received, but it could not be saved on this device: ${error.message}`
+                : "Parent decision received, but it could not be saved on this device."
+            );
+          }
+        );
+      }
+    };
+    const onError = (error: Error) => setReviewError(error.message);
+    if (
+      pendingReview.source === "realtime_database" &&
+      pendingReview.databaseSubmissionId &&
+      userId
+    ) {
+      return listenToRealtimeDatabaseMissionReview(
+        userId,
+        pendingReview.id,
+        pendingReview.databaseSubmissionId,
+        onReview,
+        onError
+      );
+    }
     return listenToMissionReview(
       pendingReview.id,
-      (updatedReview) => {
-        if (updatedReview.status === "pending") return;
-        setPendingReview(updatedReview);
-        setReviewError("");
-        if (reviewStorageKey) {
-          void AsyncStorage.setItem(reviewStorageKey, JSON.stringify(updatedReview)).catch(
-            (error: unknown) => {
-              setReviewError(
-                error instanceof Error
-                  ? `Parent decision received, but it could not be saved on this device: ${error.message}`
-                  : "Parent decision received, but it could not be saved on this device."
-              );
-            }
-          );
-        }
-      },
-      (error) => setReviewError(error.message)
+      onReview,
+      onError
     );
-  }, [pendingReview, reviewStorageKey]);
+  }, [pendingReview, refreshSubmissions, reviewStorageKey, syncSubmissions, userId]);
 
   useEffect(() => {
     if (pendingReview?.status !== "approved") return;
@@ -2044,7 +2155,11 @@ function MenuScreen({
   }, [pendingReview?.missionId, pendingReview?.status]);
 
   useEffect(() => {
-    if (pendingReview?.status === "approved" && userId) {
+    if (
+      (pendingReview?.status === "approved" ||
+        pendingReview?.status === "needs_revision") &&
+      userId
+    ) {
       void syncSubmissions().catch((error: unknown) => {
         setMissionError(
           error instanceof Error
@@ -2057,6 +2172,7 @@ function MenuScreen({
 
   const closeCheck = () => {
     setPending(null);
+    setPhotoSubmissionRequired(false);
     setPhotoUri(null);
     setPhotoContentType("image/jpeg");
     setPhotoError("");
@@ -2069,9 +2185,9 @@ function MenuScreen({
     if (
       !pending ||
       isSubmittingPhoto ||
-      (pending.submission === "photo" && !photoUri)
+      (photoSubmissionRequired && !photoUri)
     ) return;
-    if (requiresParentEmailReview(pending)) {
+    if (photoUri) {
       setIsSubmittingPhoto(true);
       setMissionError("");
       try {
@@ -2102,6 +2218,7 @@ function MenuScreen({
       }
       return;
     }
+    setScreen("menu");
 
     setMissionError("");
     try {
@@ -2179,16 +2296,23 @@ function MenuScreen({
   const startMission = (mission: OfflineMission) => {
     if (mission.submission === "shape-scan") {
       router.push({ pathname: "/shape-recognition", params: { missionId: mission.id } });
-    } else if (mission.submission === "photo") {
+    } else {
       setPending(mission);
+      setPhotoSubmissionRequired(mission.submission === "photo");
       setPhotoUri(null);
       setPhotoContentType("image/jpeg");
       setPhotoError("");
       setMissionError("");
-    } else {
-      setPending(mission);
-      setMissionError("");
     }
+  };
+
+  const startPhotoSubmission = (mission: OfflineMission) => {
+    setPending(mission);
+    setPhotoSubmissionRequired(true);
+    setPhotoUri(null);
+    setPhotoContentType("image/jpeg");
+    setPhotoError("");
+    setMissionError("");
   };
 
   const latestSubmissionByMission = new Map<string, OfflineMissionSubmission>();
@@ -2198,12 +2322,32 @@ function MenuScreen({
     }
   }
   const submissionStatusLabels: Record<OfflineMissionSubmission["status"], string> = {
-    saved_offline: "Pending Upload — saved on this device",
-    pending_upload: "Pending Upload — waiting for connection",
+    saved_offline: "Pending — saved on this device",
+    pending_upload: "Pending — saved on this device, will upload when online",
     uploading: "Uploading",
     submitted_successfully: "Submitted Successfully",
-    upload_failed: "Upload Failed — will retry when online",
+    uploaded_to_cloudinary:
+      "Photo uploaded to Cloudinary. Automatic parent review is unavailable in Firebase Spark mode.",
+    awaiting_parent_confirmation:
+      "Waiting for your parent to open the email link and confirm",
+    waiting_for_parent_review: "Waiting for Parent Review — another mission is awaiting a decision",
+    upload_failed: "Upload Failed — check connection and retry",
+    parent_approved: "Parent Approved",
+    parent_requested_retry: "Parent Requested Another Photo",
   };
+  const hasActiveMissionSubmission =
+    pendingReview?.status === "pending" ||
+    submissions.some((submission) =>
+      [
+        "saved_offline",
+        "pending_upload",
+        "uploading",
+        "submitted_successfully",
+        "awaiting_parent_confirmation",
+        "waiting_for_parent_review",
+        "upload_failed",
+      ].includes(submission.status)
+    );
 
   if (isRestoringReview) {
     return (
@@ -2220,16 +2364,24 @@ function MenuScreen({
     return (
       <SafeAreaView style={styles.missionResultPage}>
         <ScrollView contentContainerStyle={styles.missionResultContent}>
-          <View style={styles.missionResultCard}>
+          <View style={[
+            styles.missionResultCard,
+            darkMode && styles.darkCard,
+          ]}>
             <Text style={styles.missionResultIcon}>{approved ? "🌟" : "📷"}</Text>
-            <Text style={styles.pageTitle}>
+            <Text style={[styles.pageTitle, darkMode && styles.darkText]}>
               {approved ? "Mission Complete!" : "Please Try Again"}
             </Text>
-            <Text style={styles.pageSubtitle}>{reviewMission?.title ?? "Mission review"}</Text>
-            <Text style={styles.missionResultMessage}>
+            <Text style={[styles.pageSubtitle, darkMode && styles.darkMutedText]}>
+              {reviewMission?.title ?? "Mission review"}
+            </Text>
+            <Text style={[
+              styles.missionResultMessage,
+              darkMode && styles.darkMutedText,
+            ]}>
               {approved
                 ? "Your parent reviewed the photo and approved your mission. Great work!"
-                : "Your parent would like a clearer or more complete photo. Take another picture and send it for review."}
+                : "Your parent requested a new photo. Take a clearer picture of your work and send it again for review."}
             </Text>
             {reviewError ? (
               <Text accessibilityLiveRegion="polite" style={styles.missionInlineError}>
@@ -2247,6 +2399,7 @@ function MenuScreen({
                   if (!(await closePendingReview())) return;
                   if (reviewMission) {
                     setPending(reviewMission);
+                    setPhotoSubmissionRequired(true);
                     setPhotoUri(null);
                     setPhotoContentType("image/jpeg");
                     setPhotoError("");
@@ -2285,8 +2438,8 @@ function MenuScreen({
         >
           <Text style={styles.missionBackButtonText}>← Back to Dashboard</Text>
         </Pressable>
-        <Text style={styles.pageTitle}>Offline Missions</Text>
-        <Text style={styles.pageSubtitle}>
+        <Text style={[styles.pageTitle, darkMode && styles.darkText]}>Offline Missions</Text>
+        <Text style={[styles.pageSubtitle, darkMode && styles.darkMutedText]}>
           Showing only {gradeLabels[grade]} missions. Pick one to try at home!
         </Text>
         {missionError ? (
@@ -2294,32 +2447,54 @@ function MenuScreen({
             {missionError}
           </Text>
         ) : null}
+        {hasActiveMissionSubmission ? (
+          <Text style={[styles.missionSubmissionError, darkMode && styles.darkMissionError]}>
+            One mission is in progress. Other missions are paused until your parent reviews it.
+          </Text>
+        ) : null}
 
         {gradeMissions.map((mission) => {
           const done = completed.includes(mission.id);
           const latestSubmission = latestSubmissionByMission.get(mission.id);
           return (
-            <View style={styles.missionCard} key={mission.id}>
+            <View style={[styles.missionCard, darkMode && styles.darkCard]} key={mission.id}>
               <View style={styles.missionHeading}>
                 <Text style={styles.missionId}>{areaIcons[mission.area]}</Text>
-                <Text style={styles.missionTitle}>
+                <Text style={[styles.missionTitle, darkMode && styles.darkText]}>
                   {done ? "✅ " : ""}
                   {mission.title}
                 </Text>
               </View>
-              <Text style={styles.missionSkill}>📚 {mission.subject}</Text>
-              <Text style={styles.cardBody}>{mission.task}</Text>
+              <Text style={[styles.missionSkill, darkMode && styles.darkMutedText]}>📚 {mission.subject}</Text>
+              <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>{mission.task}</Text>
               {latestSubmission ? (
-                <View style={styles.missionSubmissionStatus}>
+                <View style={[
+                  styles.missionSubmissionStatus,
+                  darkMode && styles.darkMissionSubmissionStatus,
+                ]}>
                   <Text
                     accessibilityLiveRegion="polite"
-                    style={styles.missionSubmissionStatusText}
+                    style={[
+                      styles.missionSubmissionStatusText,
+                      darkMode && styles.darkText,
+                    ]}
                   >
                     Submission:{" "}
-                    {submissionStatusLabels[latestSubmission.status]}
+                    {latestSubmission.errorMessage?.includes(
+                      "A mission is already waiting for your parent"
+                    )
+                      ? submissionStatusLabels.waiting_for_parent_review
+                      : submissionStatusLabels[latestSubmission.status]}
+                    {latestSubmission.status === "uploading" &&
+                    latestSubmission.progressPercent !== undefined
+                      ? ` (${latestSubmission.progressPercent}%)`
+                      : ""}
                   </Text>
                   {latestSubmission.errorMessage ? (
-                    <Text style={styles.missionSubmissionError}>
+                    <Text style={[
+                      styles.missionSubmissionError,
+                      darkMode && styles.darkMissionError,
+                    ]}>
                       {latestSubmission.errorMessage}
                     </Text>
                   ) : null}
@@ -2335,7 +2510,10 @@ function MenuScreen({
                           );
                         });
                       }}
-                      style={styles.missionRetryUpload}
+                      style={[
+                        styles.missionRetryUpload,
+                        darkMode && styles.darkMissionRetryUpload,
+                      ]}
                     >
                       <Text style={styles.missionRetryUploadText}>RETRY UPLOAD</Text>
                     </Pressable>
@@ -2343,13 +2521,28 @@ function MenuScreen({
                 </View>
               ) : null}
               {mission.submission === "photo" ? (
-                <Text style={styles.missionPhotoInstruction}>
+                <Text style={[
+                  styles.missionPhotoInstruction,
+                  darkMode && styles.darkMutedText,
+                ]}>
                   📷 Take a photo of your work to send to your parent for approval.
                 </Text>
               ) : null}
-              <ActionButton onPress={() => startMission(mission)}>
+              <ActionButton
+                disabled={!submissionsReady || hasActiveMissionSubmission}
+                onPress={() => startMission(mission)}
+              >
                 {done ? "DO IT AGAIN" : "START MISSION"}
               </ActionButton>
+              {mission.submission !== "photo" ? (
+                <ActionButton
+                  disabled={!submissionsReady || hasActiveMissionSubmission}
+                  onPress={() => startPhotoSubmission(mission)}
+                  variant="secondary"
+                >
+                  SUBMIT A PHOTO FOR REVIEW
+                </ActionButton>
+              ) : null}
             </View>
           );
         })}
@@ -2375,7 +2568,7 @@ function MenuScreen({
             <Text style={[styles.missionSkill, { marginTop: 12 }]}>
               Parent check: {pending?.parentCheck}
             </Text>
-            {pending?.submission === "photo" ? (
+            {photoSubmissionRequired ? (
               <>
                 <Text style={styles.photoReviewHeading}>
                   {photoUri ? "Review the photo before sending" : "Add a photo to continue"}
@@ -2385,7 +2578,7 @@ function MenuScreen({
                     source={{ uri: photoUri }}
                     style={styles.missionPhotoPreview}
                     resizeMode="contain"
-                    accessibilityLabel={`Photo evidence for ${pending.title}`}
+                    accessibilityLabel={`Photo evidence for ${pending?.title ?? "mission"}`}
                   />
                 ) : (
                   <View style={styles.missionPhotoPlaceholder}>
@@ -2433,22 +2626,27 @@ function MenuScreen({
             ) : null}
             <Pressable
               accessibilityRole="button"
-              disabled={isSubmittingPhoto || (pending?.submission === "photo" && !photoUri)}
+              disabled={isSubmittingPhoto || (photoSubmissionRequired && !photoUri)}
               onPress={() => void confirmMission()}
               style={({ pressed }) => [
                 styles.actionButton,
-                (isSubmittingPhoto || (pending?.submission === "photo" && !photoUri)) &&
+                (isSubmittingPhoto || (photoSubmissionRequired && !photoUri)) &&
                   styles.missionActionDisabled,
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.actionButtonText}>
-                {isSubmittingPhoto
-                  ? "SAVING ON DEVICE..."
-                  : pending && requiresParentEmailReview(pending)
-                    ? "SAVE SUBMISSION"
-                    : "PARENT CONFIRMS ✓"}
-              </Text>
+              <View style={styles.missionSubmitButtonContent}>
+                {isSubmittingPhoto ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : null}
+                <Text style={styles.actionButtonText}>
+                  {isSubmittingPhoto
+                    ? "SAVING SUBMISSION..."
+                    : photoSubmissionRequired
+                      ? "SUBMIT PHOTO FOR PARENT REVIEW"
+                      : "PARENT CONFIRMS ✓"}
+                </Text>
+              </View>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -2480,7 +2678,9 @@ function MenuScreen({
               "Mission photo"}
           </Text>
           <Text style={styles.missionPendingMessage}>
-            Your photo and mission target were emailed to your parent. You can continue when your parent reviews it.
+            {pendingReview?.source === "realtime_database"
+              ? "We sent a secure sign-in link to your parent. After opening it and confirming your photo, your badge will unlock."
+              : "Your photo and mission target were emailed to your parent. You can continue when your parent reviews it."}
           </Text>
           {auth?.currentUser?.email ? (
             <Text style={styles.missionPendingEmail}>{auth.currentUser.email}</Text>
@@ -2518,21 +2718,22 @@ function TutorialScreen({
   setScreen: (s: Screen) => void;
   onContinue?: () => void;
 }) {
+  const { darkMode } = useContext(AppAppearanceContext);
   return (
     <SafeAreaView style={styles.appPage}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>How to LearnBridge</Text>
+        <Text style={[styles.pageTitle, darkMode && styles.darkText]}>How to LearnBridge</Text>
         {[
           ["📖", "1. Choose a Lesson", "Select a math lesson that you want to learn."],
           ["🎮", "2. Practice", "Play activities and answer simple questions."],
           ["⭐", "3. Earn Stars", "Complete activities to earn stars and improve your progress."],
           ["🇵🇭", "4. Try Offline Missions", "Practice mathematics using everyday Filipino experiences."],
         ].map(([icon, title, text]) => (
-          <View style={styles.tutorialCard} key={title}>
+          <View style={[styles.tutorialCard, darkMode && styles.darkCard]} key={title}>
             <Text style={styles.tutorialIcon}>{icon}</Text>
             <View style={styles.tutorialCopy}>
-              <Text style={styles.cardHeading}>{title}</Text>
-              <Text style={styles.cardBody}>{text}</Text>
+              <Text style={[styles.cardHeading, darkMode && styles.darkText]}>{title}</Text>
+              <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>{text}</Text>
             </View>
           </View>
         ))}
@@ -2557,6 +2758,7 @@ function GradeSetupTutorialScreen({
   const [selectedGrade, setSelectedGrade] = useState<Grade | null>(currentGrade);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const { darkMode } = useContext(AppAppearanceContext);
 
   const saveGrade = async () => {
     if (!selectedGrade || isSaving) return;
@@ -2574,8 +2776,8 @@ function GradeSetupTutorialScreen({
   return (
     <SafeAreaView style={styles.appPage}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Your LearnBridge tutorial</Text>
-        <Text style={styles.pageSubtitle}>
+        <Text style={[styles.pageTitle, darkMode && styles.darkText]}>Your LearnBridge tutorial</Text>
+        <Text style={[styles.pageSubtitle, darkMode && styles.darkMutedText]}>
           Welcome{childName ? `, ${childName}` : ""}! Your email is verified. First, choose your child's current grade so we can show the right activities.
         </Text>
         {[
@@ -2583,17 +2785,17 @@ function GradeSetupTutorialScreen({
           ["🎮", "Practice together", "Try activities and answer questions at your own pace."],
           ["⭐", "Celebrate progress", "Complete activities to earn stars and build confidence."],
         ].map(([icon, title, text]) => (
-          <View style={styles.tutorialCard} key={title}>
+          <View style={[styles.tutorialCard, darkMode && styles.darkCard]} key={title}>
             <Text style={styles.tutorialIcon}>{icon}</Text>
             <View style={styles.tutorialCopy}>
-              <Text style={styles.cardHeading}>{title}</Text>
-              <Text style={styles.cardBody}>{text}</Text>
+              <Text style={[styles.cardHeading, darkMode && styles.darkText]}>{title}</Text>
+              <Text style={[styles.cardBody, darkMode && styles.darkMutedText]}>{text}</Text>
             </View>
           </View>
         ))}
-        <View style={styles.gradeSetupCard}>
-          <Text style={styles.gradeSetupTitle}>What grade is your child in?</Text>
-          <Text style={styles.gradeSetupHint}>You can update this later in Account Settings.</Text>
+        <View style={[styles.gradeSetupCard, darkMode && styles.darkPanel]}>
+          <Text style={[styles.gradeSetupTitle, darkMode && styles.darkText]}>What grade is your child in?</Text>
+          <Text style={[styles.gradeSetupHint, darkMode && styles.darkMutedText]}>You can update this later in Account Settings.</Text>
           <View style={styles.gradeSetupOptions}>
             {(Object.keys(gradeLabels) as Grade[]).map((grade) => {
               const selected = selectedGrade === grade;
@@ -2603,17 +2805,31 @@ function GradeSetupTutorialScreen({
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                   onPress={() => setSelectedGrade(grade)}
-                  style={[styles.gradeSetupOption, selected && styles.gradeSetupOptionSelected]}
+                  style={[
+                    styles.gradeSetupOption,
+                    darkMode && styles.darkGradeSetupOption,
+                    selected && styles.gradeSetupOptionSelected,
+                    darkMode && selected && styles.darkGradeSetupOptionSelected,
+                  ]}
                 >
-                  <Text style={styles.gradeSetupEmoji}>{grade === "K" ? "🎨" : "📚"}</Text>
-                  <Text style={[styles.gradeSetupOptionText, selected && styles.gradeSetupOptionTextSelected]}>
+                  {grade === "K" ? (
+                    <AnimatedLearningSticker variant="owl" size={32} />
+                  ) : (
+                    <Text style={styles.gradeSetupEmoji}>📚</Text>
+                  )}
+                  <Text style={[
+                    styles.gradeSetupOptionText,
+                    darkMode && styles.darkText,
+                    selected && styles.gradeSetupOptionTextSelected,
+                    darkMode && selected && styles.darkText,
+                  ]}>
                     {gradeLabels[grade]}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
-          {error ? <Text style={styles.formMessage}>{error}</Text> : null}
+          {error ? <Text style={[styles.formMessage, darkMode && styles.darkErrorMessage]}>{error}</Text> : null}
           <Pressable
             accessibilityRole="button"
             disabled={!selectedGrade || isSaving}
@@ -2776,7 +2992,7 @@ export default function App() {
           setProfilesReady(true);
           if (user.emailVerified) {
             setScreen((currentScreen) => {
-              const canRedirect = ["login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
+              const canRedirect = ["home", "login", "signup", "verify-email", "tutorial", "menu"].includes(currentScreen);
               if (!canRedirect) return currentScreen;
               return localActiveProfile?.grade ? "menu" : "grade-selection";
             });
@@ -2871,6 +3087,20 @@ export default function App() {
           setSelectedIcon(activeProfile.selectedIcon);
         }
         setProfilesReady(true);
+        if (user.emailVerified) {
+          setScreen((currentScreen) => {
+            const canRedirect = [
+              "home",
+              "login",
+              "signup",
+              "verify-email",
+              "tutorial",
+              "menu",
+            ].includes(currentScreen);
+            if (!canRedirect) return currentScreen;
+            return activeProfile?.grade ? "menu" : "grade-selection";
+          });
+        }
         if (cloudSyncError) {
           console.warn("Using the saved local learner profile while cloud access is unavailable.", cloudSyncError);
         }
@@ -2905,7 +3135,7 @@ export default function App() {
     });
 
     const networkSubscription = Network.addNetworkStateListener((state) => {
-      if (state.isConnected !== true) return;
+      if (isDefinitelyOffline(state)) return;
       const userId = currentAuth.currentUser?.uid;
       if (!userId) return;
       if (currentAuth.currentUser?.emailVerified) syncPendingMissionPhotos(userId);
@@ -2965,12 +3195,14 @@ export default function App() {
 
     const storageKey = getLessonProgressStorageKey(userId, activeProfileId);
     const mistakesStorageKey = getLessonMistakesStorageKey(userId, activeProfileId);
+    const clearPendingKey = getLessonProgressClearPendingKey(userId, activeProfileId);
     setLessonProgressReady(false);
     void Promise.all([
       AsyncStorage.getItem(storageKey),
       AsyncStorage.getItem(mistakesStorageKey),
+      AsyncStorage.getItem(clearPendingKey),
     ])
-      .then(([storedProgress, storedMistakes]) => {
+      .then(async ([storedProgress, storedMistakes, clearPending]) => {
         if (!isCurrent) return;
         const parsedProgress: unknown = storedProgress ? JSON.parse(storedProgress) : [];
         if (
@@ -2983,10 +3215,49 @@ export default function App() {
         if (!isLessonMistakeCounts(parsedMistakes)) {
           throw new Error("Saved lesson mistake counts are invalid.");
         }
-        completedLessonIdsRef.current = parsedProgress;
-        lessonMistakeCountsRef.current = parsedMistakes;
-        setCompletedLessonIds(parsedProgress);
-        setLessonMistakeCounts(parsedMistakes);
+        let progress = {
+          completedLessonIds: parsedProgress,
+          mistakeCounts: parsedMistakes,
+        };
+        if (!deviceOffline && firestore) {
+          let shouldSyncCloud = true;
+          if (clearPending) {
+            try {
+              await deleteLearnerProgress(firestore, userId, activeProfileId);
+              await AsyncStorage.removeItem(clearPendingKey);
+            } catch (error) {
+              shouldSyncCloud = false;
+              console.warn(
+                "The cleared cloud progress will be removed when the connection is available.",
+                error
+              );
+            }
+          }
+          try {
+            if (shouldSyncCloud) {
+              progress = await syncLearnerProgress(
+                firestore,
+                userId,
+                activeProfileId,
+                progress
+              );
+              await AsyncStorage.multiSet([
+                [storageKey, JSON.stringify(progress.completedLessonIds)],
+                [mistakesStorageKey, JSON.stringify(progress.mistakeCounts)],
+              ]);
+            }
+          } catch (error) {
+            console.warn(
+              "Using the saved local learning progress while cloud sync is unavailable.",
+              error
+            );
+          }
+        }
+        if (!isCurrent) return;
+        completedLessonIdsRef.current = progress.completedLessonIds;
+        lessonMistakeCountsRef.current = progress.mistakeCounts;
+        setCompletedLessonIds(progress.completedLessonIds);
+        setLessonMistakeCounts(progress.mistakeCounts);
         setLessonProgressReady(true);
       })
       .catch((error: unknown) => {
@@ -3001,7 +3272,7 @@ export default function App() {
     return () => {
       isCurrent = false;
     };
-  }, [firebaseUser?.uid, activeProfileId]);
+  }, [firebaseUser?.uid, activeProfileId, deviceOffline]);
 
   useEffect(() => {
     notificationsEnabledRef.current = preferences.notificationsEnabled;
@@ -3277,7 +3548,14 @@ export default function App() {
         "Lesson progress not saved",
         error instanceof Error ? error.message : "Check device storage and try again."
       );
+      return;
     }
+    queueLearnerProgressSync(
+      currentUser.uid,
+      activeProfileId,
+      nextIds,
+      lessonMistakeCountsRef.current
+    );
   };
 
   const handleRecordLessonMistake = async (lessonId: string) => {
@@ -3303,8 +3581,64 @@ export default function App() {
         "Mistake count not saved",
         error instanceof Error ? error.message : "Check device storage and try again."
       );
+      return;
     }
+    queueLearnerProgressSync(
+      currentUser.uid,
+      activeProfileId,
+      completedLessonIdsRef.current,
+      nextCounts
+    );
   };
+
+  function queueLearnerProgressSync(
+    userId: string,
+    profileId: string,
+    completedLessonIds: string[],
+    mistakeCounts: Record<string, number>
+  ) {
+    const database = firestore;
+    if (!database || deviceOffline) return;
+    const nextSync = profileWriteQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const clearPendingKey = getLessonProgressClearPendingKey(userId, profileId);
+        if (await AsyncStorage.getItem(clearPendingKey)) {
+          await deleteLearnerProgress(database, userId, profileId);
+          await AsyncStorage.removeItem(clearPendingKey);
+        }
+        const progress = await syncLearnerProgress(database, userId, profileId, {
+          completedLessonIds,
+          mistakeCounts,
+        });
+        if (auth?.currentUser?.uid !== userId || activeProfileId !== profileId) {
+          return;
+        }
+        await AsyncStorage.multiSet([
+          [
+            getLessonProgressStorageKey(userId, profileId),
+            JSON.stringify(progress.completedLessonIds),
+          ],
+          [
+            getLessonMistakesStorageKey(userId, profileId),
+            JSON.stringify(progress.mistakeCounts),
+          ],
+        ]);
+        completedLessonIdsRef.current = progress.completedLessonIds;
+        lessonMistakeCountsRef.current = progress.mistakeCounts;
+        setCompletedLessonIds(progress.completedLessonIds);
+        setLessonMistakeCounts(progress.mistakeCounts);
+      });
+    profileWriteQueueRef.current = nextSync;
+    void nextSync.catch((error: unknown) => {
+      Alert.alert(
+        "Progress saved on this device",
+        `Cloud sync will retry when the connection returns. ${
+          error instanceof Error ? error.message : "Check your internet connection."
+        }`
+      );
+    });
+  }
 
   const handlePreferencesChange = async (nextPreferences: AccountPreferences) => {
     const currentUser = auth?.currentUser;
@@ -3368,14 +3702,17 @@ export default function App() {
   const clearLearningProgress = async () => {
     const currentUser = auth?.currentUser;
     if (currentUser && activeProfileId) {
+      const profileId = activeProfileId;
+      const clearPendingKey = getLessonProgressClearPendingKey(
+        currentUser.uid,
+        profileId
+      );
       try {
-        await Promise.all([
-          AsyncStorage.removeItem(
-            getLessonProgressStorageKey(currentUser.uid, activeProfileId)
-          ),
-          AsyncStorage.removeItem(
-            getLessonMistakesStorageKey(currentUser.uid, activeProfileId)
-          ),
+        await profileWriteQueueRef.current.catch(() => undefined);
+        await AsyncStorage.setItem(clearPendingKey, String(Date.now()));
+        await AsyncStorage.multiRemove([
+          getLessonProgressStorageKey(currentUser.uid, profileId),
+          getLessonMistakesStorageKey(currentUser.uid, profileId),
         ]);
       } catch (error) {
         Alert.alert(
@@ -3383,6 +3720,20 @@ export default function App() {
           error instanceof Error ? error.message : "Check device storage and try again."
         );
         return;
+      }
+
+      if (firestore && !deviceOffline) {
+        try {
+          await deleteLearnerProgress(firestore, currentUser.uid, profileId);
+          await AsyncStorage.removeItem(clearPendingKey);
+        } catch (error) {
+          Alert.alert(
+            "Progress cleared on this device",
+            `The cloud copy will be removed when the connection returns. ${
+              error instanceof Error ? error.message : ""
+            }`
+          );
+        }
       }
     }
     completedLessonIdsRef.current = [];
@@ -3426,6 +3777,7 @@ export default function App() {
         }
         return;
       }
+      setScreen("menu");
     } catch (error) {
       throw new Error(getAuthErrorMessage(error));
     }
@@ -3621,6 +3973,11 @@ export default function App() {
       ...childProfiles.map((profile) =>
         AsyncStorage.removeItem(getLessonMistakesStorageKey(user.uid, profile.id))
       ),
+      ...childProfiles.map((profile) =>
+        AsyncStorage.removeItem(
+      getLessonProgressClearPendingKey(user.uid, profile.id)
+        )
+      ),
     ]).catch(() => undefined);
     setFirebaseUser(null);
     setEmail("");
@@ -3791,7 +4148,7 @@ export default function App() {
             PARENT: ACCOUNT SETTINGS
           </ActionButton>
           <ActionButton onPress={() => void handleSignOut()} variant="secondary">
-            SIGN OUT
+            LOG OUT & EXIT TO TITLE
           </ActionButton>
         </View>
       </SafeAreaView>
@@ -4128,7 +4485,10 @@ const styles = StyleSheet.create({
   homeActions: { width: "100%", maxWidth: 360, gap: 10 },
   actionButton: { alignItems: "center", justifyContent: "center", minHeight: 58, paddingHorizontal: 16, borderRadius: 16, backgroundColor: "#F17D65", marginBottom: 6 },
   actionButtonText: { color: "#FFFDF5", fontWeight: "700", fontSize: 16, textAlign: "center" },
+  missionSubmitButtonContent: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   secondaryButton: { backgroundColor: "#258EA3", marginBottom: 6 },
+  dangerButton: { backgroundColor: "#C62828", marginBottom: 6 },
+  dangerButtonDark: { backgroundColor: "#A61F2B" },
   secondaryButtonText: { color: "#FFFDF5", fontSize: 14, textAlign: "left" },
   pressed: { opacity: 0.7 },
   appPage: { flex: 1, backgroundColor: "transparent" },
@@ -4194,6 +4554,7 @@ const styles = StyleSheet.create({
   offlineCopy: { flex: 1, paddingRight: 4 },
   missionCardHeading: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
   openMissionsButton: { alignSelf: "flex-end", backgroundColor: "#FFFFFF", borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, marginTop: 14 },
+  darkOpenMissionsButton: { backgroundColor: "#303D55", borderWidth: 1, borderColor: "#50617A" },
   cardBody: { color: "#36566A", fontSize: 15, lineHeight: 22 },
   openButton: { color: "#173B53", fontWeight: "800", fontSize: 14 },
   pageTitle: { color: "#173B53", fontSize: 28, fontWeight: "900", textAlign: "center", marginBottom: 6 },
@@ -4283,6 +4644,12 @@ const styles = StyleSheet.create({
   actionButtonSecondaryDark: { backgroundColor: "#456C7B" },
   darkPanel: { backgroundColor: "#253149", borderColor: "#3B4A64" },
   darkCard: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkGradeSetupOption: { backgroundColor: "#303D55", borderColor: "#465671" },
+  darkGradeSetupOptionSelected: { backgroundColor: "#456C7B", borderColor: "#8FC9DA" },
+  darkErrorMessage: { color: "#FFAAA2" },
+  darkMissionSubmissionStatus: { backgroundColor: "#202B40" },
+  darkMissionError: { color: "#FFAAA2" },
+  darkMissionRetryUpload: { backgroundColor: "#456C7B" },
   darkAccent: { backgroundColor: "#3B5067", borderColor: "#50617A" },
   darkTrack: { backgroundColor: "#46546A" },
   darkText: { color: "#E4EAF3" },
