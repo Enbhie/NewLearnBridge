@@ -1,6 +1,10 @@
 import { Directory, File, Paths } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import * as Network from "expo-network";
+import {
+  isCloudinaryConfigured,
+  isCloudinaryConfigurationError,
+} from "../../cloudinary";
 import { auth } from "../firebase";
 import { isDefinitelyOffline } from "../utils/internetConnectivity";
 import { submitMissionPhotoForReview } from "./missionSubmissions";
@@ -12,6 +16,7 @@ export type MissionSubmissionStatus =
   | "submitted_successfully"
   | "uploaded_to_cloudinary"
   | "awaiting_parent_confirmation"
+  | "configuration_required"
   | "review_email_failed"
   | "waiting_for_parent_review"
   | "parent_approved"
@@ -320,6 +325,7 @@ async function syncUserSubmissions(
            'saved_offline',
            'pending_upload',
            'upload_failed'
+           ${isCloudinaryConfigured() ? ", 'configuration_required'" : ""}
            ${retryReviewEmail ? ", 'review_email_failed'" : ""}
          )
        ORDER BY submitted_at ASC`,
@@ -432,9 +438,11 @@ async function syncUserSubmissions(
       const waitingForReview = errorMessage.includes(
         "A mission is already waiting for your parent"
       );
-      const status: MissionSubmissionStatus = waitingForReview
-        ? "waiting_for_parent_review"
-        : "upload_failed";
+      const status: MissionSubmissionStatus = isCloudinaryConfigurationError(error)
+        ? "configuration_required"
+        : waitingForReview
+          ? "waiting_for_parent_review"
+          : "upload_failed";
       await database.runAsync(
         `UPDATE mission_submissions
          SET status = ?, error_message = ?

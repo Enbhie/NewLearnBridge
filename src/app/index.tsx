@@ -2360,6 +2360,8 @@ function MenuScreen({
     submitted_successfully: "Submitted Successfully",
     uploaded_to_cloudinary:
       "Photo uploaded to Cloudinary. Automatic parent review is unavailable in Firebase Spark mode.",
+    configuration_required:
+      "Upload setup required — add the Cloudinary settings to EAS preview and rebuild",
     awaiting_parent_confirmation:
       "Waiting for your parent to open the email link and confirm",
     review_email_failed:
@@ -2377,6 +2379,7 @@ function MenuScreen({
         "pending_upload",
         "uploading",
         "submitted_successfully",
+        "configuration_required",
         "awaiting_parent_confirmation",
         "review_email_failed",
         "waiting_for_parent_review",
