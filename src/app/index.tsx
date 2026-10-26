@@ -1880,11 +1880,13 @@ function MenuScreen({
   const [missionError, setMissionError] = useState("");
   const [isPickingPhoto, setIsPickingPhoto] = useState(false);
   const [isSubmittingPhoto, setIsSubmittingPhoto] = useState(false);
+  const [isRetryingReviewEmail, setIsRetryingReviewEmail] = useState(false);
   const [pendingReview, setPendingReview] = useState<MissionReview | null>(null);
   const [isPendingReviewDismissed, setIsPendingReviewDismissed] = useState(false);
   const [submissions, setSubmissions] = useState<OfflineMissionSubmission[]>([]);
   const [submissionsReady, setSubmissionsReady] = useState(false);
   const [reviewError, setReviewError] = useState("");
+  const [isReviewEmailFailed, setIsReviewEmailFailed] = useState(false);
   const [isRestoringReview, setIsRestoringReview] = useState(true);
   const restoredReviewRef = useRef(false);
   const reviewStorageKey = auth?.currentUser
@@ -1904,11 +1906,18 @@ function MenuScreen({
     setSubmissions(savedSubmissions);
     const awaitingReview = savedSubmissions.find(
       (submission) =>
-        submission.status === "awaiting_parent_confirmation" &&
+        (submission.status === "awaiting_parent_confirmation" ||
+          submission.status === "review_email_failed") &&
         Boolean(submission.databaseSubmissionId)
     );
     if (awaitingReview && !restoredReviewRef.current) {
       restoredReviewRef.current = true;
+      setReviewError(
+        awaitingReview.status === "review_email_failed"
+          ? awaitingReview.errorMessage ?? "The parent review email was not sent."
+          : ""
+      );
+      setIsReviewEmailFailed(awaitingReview.status === "review_email_failed");
       const review: MissionReview = {
         id: awaitingReview.id,
         missionId: awaitingReview.missionId,
@@ -1933,7 +1942,7 @@ function MenuScreen({
     setSubmissionsReady(true);
   }, [reviewStorageKey, userId]);
 
-  const syncSubmissions = useCallback(async () => {
+  const syncSubmissions = useCallback(async (retryReviewEmail = false) => {
     if (!userId) return;
     await syncMissionSubmissions(userId, (submission) => {
       setSubmissions((current) => [
@@ -1942,10 +1951,18 @@ function MenuScreen({
       ]);
       if (
         submission.status === "submitted_successfully" ||
-        submission.status === "awaiting_parent_confirmation"
+        submission.status === "awaiting_parent_confirmation" ||
+        submission.status === "review_email_failed"
       ) {
+        setIsReviewEmailFailed(submission.status === "review_email_failed");
+        setReviewError(
+          submission.status === "review_email_failed"
+            ? submission.errorMessage ?? "The parent review email was not sent."
+            : ""
+        );
         if (
-          submission.status === "awaiting_parent_confirmation" &&
+          (submission.status === "awaiting_parent_confirmation" ||
+            submission.status === "review_email_failed") &&
           !submission.databaseSubmissionId
         ) {
           setReviewError(
@@ -1959,7 +1976,8 @@ function MenuScreen({
           missionId: submission.missionId,
           status: "pending",
           source:
-            submission.status === "awaiting_parent_confirmation"
+            submission.status === "awaiting_parent_confirmation" ||
+            submission.status === "review_email_failed"
               ? "realtime_database"
               : "firestore",
           ...(submission.databaseSubmissionId
@@ -1980,9 +1998,23 @@ function MenuScreen({
           );
         }
       }
-    });
+    }, { retryReviewEmail });
     await refreshSubmissions();
   }, [refreshSubmissions, reviewStorageKey, userId]);
+
+  const retryParentReviewEmail = useCallback(async () => {
+    const networkState = await Network.getNetworkStateAsync();
+    if (isDefinitelyOffline(networkState)) {
+      setReviewError("Connect to the internet before retrying the parent review email.");
+      return;
+    }
+    setIsRetryingReviewEmail(true);
+    try {
+      await syncSubmissions(true);
+    } finally {
+      setIsRetryingReviewEmail(false);
+    }
+  }, [syncSubmissions]);
 
   useEffect(() => {
     let active = true;
@@ -2330,6 +2362,8 @@ function MenuScreen({
       "Photo uploaded to Cloudinary. Automatic parent review is unavailable in Firebase Spark mode.",
     awaiting_parent_confirmation:
       "Waiting for your parent to open the email link and confirm",
+    review_email_failed:
+      "Photo saved — parent email was not sent; retry when the quota resets",
     waiting_for_parent_review: "Waiting for Parent Review — another mission is awaiting a decision",
     upload_failed: "Upload Failed — check connection and retry",
     parent_approved: "Parent Approved",
@@ -2344,6 +2378,7 @@ function MenuScreen({
         "uploading",
         "submitted_successfully",
         "awaiting_parent_confirmation",
+        "review_email_failed",
         "waiting_for_parent_review",
         "upload_failed",
       ].includes(submission.status)
@@ -2498,10 +2533,25 @@ function MenuScreen({
                       {latestSubmission.errorMessage}
                     </Text>
                   ) : null}
-                  {latestSubmission.status === "upload_failed" ? (
+                  {latestSubmission.status === "upload_failed" ||
+                  latestSubmission.status === "review_email_failed" ? (
                     <Pressable
                       accessibilityRole="button"
+                      disabled={
+                        latestSubmission.status === "review_email_failed" &&
+                        isRetryingReviewEmail
+                      }
                       onPress={() => {
+                        if (latestSubmission.status === "review_email_failed") {
+                          void retryParentReviewEmail().catch((error: unknown) => {
+                            setMissionError(
+                              error instanceof Error
+                                ? `Could not retry the parent email: ${error.message}`
+                                : "Could not retry the parent email."
+                            );
+                          });
+                          return;
+                        }
                         void syncSubmissions().catch((error: unknown) => {
                           setMissionError(
                             error instanceof Error
@@ -2515,7 +2565,11 @@ function MenuScreen({
                         darkMode && styles.darkMissionRetryUpload,
                       ]}
                     >
-                      <Text style={styles.missionRetryUploadText}>RETRY UPLOAD</Text>
+                      <Text style={styles.missionRetryUploadText}>
+                        {latestSubmission.status === "review_email_failed"
+                          ? "RETRY PARENT EMAIL"
+                          : "RETRY UPLOAD"}
+                      </Text>
                     </Pressable>
                   ) : null}
                 </View>
@@ -2678,7 +2732,9 @@ function MenuScreen({
               "Mission photo"}
           </Text>
           <Text style={styles.missionPendingMessage}>
-            {pendingReview?.source === "realtime_database"
+            {pendingReview?.source === "realtime_database" && isReviewEmailFailed
+              ? "Your photo is saved, but Firebase could not send the parent review email. Retry after the daily email quota resets."
+              : pendingReview?.source === "realtime_database"
               ? "We sent a secure sign-in link to your parent. After opening it and confirming your photo, your badge will unlock."
               : "Your photo and mission target were emailed to your parent. You can continue when your parent reviews it."}
           </Text>
@@ -2690,6 +2746,30 @@ function MenuScreen({
             <Text accessibilityLiveRegion="polite" style={styles.missionInlineError}>
               {reviewError}
             </Text>
+          ) : null}
+          {pendingReview?.source === "realtime_database" && isReviewEmailFailed ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={isRetryingReviewEmail}
+              onPress={() => {
+                void retryParentReviewEmail()
+                  .catch((error: unknown) => {
+                    setMissionError(
+                      error instanceof Error
+                        ? `Could not retry the parent email: ${error.message}`
+                        : "Could not retry the parent email."
+                    );
+                  })
+                  .finally(() => setIsRetryingReviewEmail(false));
+              }}
+              style={styles.missionContinueButton}
+            >
+              {isRetryingReviewEmail ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.missionContinueButtonText}>RETRY PARENT EMAIL</Text>
+              )}
+            </Pressable>
           ) : null}
           <Text style={styles.missionPendingHint}>
             Your submission was received. This screen will update automatically after your parent decides.

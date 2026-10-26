@@ -12,6 +12,7 @@ export type MissionSubmissionStatus =
   | "submitted_successfully"
   | "uploaded_to_cloudinary"
   | "awaiting_parent_confirmation"
+  | "review_email_failed"
   | "waiting_for_parent_review"
   | "parent_approved"
   | "parent_requested_retry"
@@ -271,7 +272,8 @@ export async function markMissionSubmissionReviewed(
 
 async function syncUserSubmissions(
   userId: string,
-  onStatusChange: StatusChangeListener
+  onStatusChange: StatusChangeListener,
+  retryReviewEmail: boolean
 ): Promise<void> {
   const networkState = await Network.getNetworkStateAsync();
   if (isDefinitelyOffline(networkState)) {
@@ -340,6 +342,7 @@ async function syncUserSubmissions(
          'saved_offline',
          'pending_upload',
          'upload_failed'
+         ${retryReviewEmail ? ", 'review_email_failed'" : ""}
        )
      ORDER BY submitted_at ASC`,
     userId
@@ -413,15 +416,20 @@ async function syncUserSubmissions(
           },
         }
       );
+      const reviewEmailError =
+        "reviewEmailError" in result ? result.reviewEmailError : undefined;
       const finalStatus =
-        result.status === "awaiting_parent_confirmation"
+        reviewEmailError
+          ? "review_email_failed"
+          : result.status === "awaiting_parent_confirmation"
           ? "awaiting_parent_confirmation"
           : "submitted_successfully";
       await database.runAsync(
         `UPDATE mission_submissions
-         SET status = ?, error_message = NULL
+         SET status = ?, error_message = ?
          WHERE id = ? AND user_id = ?`,
         finalStatus,
+         reviewEmailError ?? null,
         submission.id,
         userId
       );
@@ -430,7 +438,7 @@ async function syncUserSubmissions(
       onStatusChange({
         ...submission,
         status: finalStatus,
-        errorMessage: null,
+        errorMessage: reviewEmailError ?? null,
         progressPercent: 100,
         cloudinaryPublicId,
         cloudinarySecureUrl,
@@ -471,7 +479,8 @@ async function syncUserSubmissions(
 
 export function syncMissionSubmissions(
   userId: string,
-  onStatusChange: StatusChangeListener
+  onStatusChange: StatusChangeListener,
+  options: { retryReviewEmail?: boolean } = {}
 ): Promise<void> {
   let job = syncPromises.get(userId);
   if (!job) {
@@ -488,7 +497,7 @@ export function syncMissionSubmissions(
           console.error("Mission submission status listener failed.", error);
         }
       }
-    }).finally(() => {
+    }, options.retryReviewEmail === true).finally(() => {
       if (syncPromises.get(userId) === newJob) syncPromises.delete(userId);
     });
     syncPromises.set(userId, newJob);

@@ -1,0 +1,49 @@
+# Keep this file in sync with .gitignore; EAS uses .easignore instead when present.
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+functions/lib/
+
+example
+
+# generated native folders
+/ios
+/android
+
+# Local agent configuration and runtime validation data
+/.agents/
+/.claude/
+/.tsupgrader/

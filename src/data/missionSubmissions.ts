@@ -152,6 +152,7 @@ export type MissionPhotoSubmissionResult =
       databaseSubmissionId: string;
       source: "realtime_database";
       status: "awaiting_parent_confirmation";
+      reviewEmailError?: string;
     };
 
 export type MissionReviewStatus = "pending" | "approved" | "needs_revision";
@@ -286,13 +287,26 @@ export async function submitMissionPhotoForReview(
           handleCodeInApp: true,
         });
       } catch (error) {
-        const reason =
-          error instanceof Error
-            ? error.message
-            : "Firebase Authentication could not send the email.";
-        throw new Error(
-          `The photo was uploaded and saved, but the parent review link could not be sent: ${reason}`
-        );
+        const errorCode =
+          typeof error === "object" && error !== null && "code" in error
+            ? error.code
+            : undefined;
+        const reviewEmailError =
+          errorCode === "auth/quota-exceeded"
+            ? "The photo is uploaded and saved, but Firebase's daily email quota was reached. The parent review link was not sent. Retry after the quota resets."
+            : `The photo is uploaded and saved, but the parent review link could not be sent: ${
+                error instanceof Error
+                  ? error.message
+                  : "Firebase Authentication could not send the email."
+              }`;
+        return {
+          id: submissionId,
+          missionId,
+          databaseSubmissionId,
+          source: "realtime_database",
+          status: "awaiting_parent_confirmation",
+          reviewEmailError,
+        };
       }
     }
     return {

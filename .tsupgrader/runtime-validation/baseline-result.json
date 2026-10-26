@@ -1,0 +1,27 @@
+{
+  "planHash": "892394a4cbcffbb599fdd4259e68a450106850ceff99a55cf673c4fcb9278b3b",
+  "phase": "baseline",
+  "recordedAtUtc": "2026-10-26T03:29:04.1276852Z",
+  "retryCount": 0,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": false,
+    "setupDurationMs": 4378,
+    "setupFailureOutput": "setup step 0 \u0027npm\u0027 failed (exit=1, timedOut=False)\r\nnpm error code EUSAGE\r\nnpm error\r\nnpm error \u0060npm ci\u0060 can only install packages when your package.json and package-lock.json are in sync. Please update your lock file with \u0060npm install\u0060 before continuing.\r\nnpm error\r\nnpm error Missing: @react-native/metro-config@0.88.0 from lock file\r\nnpm error Missing: @react-native/metro-babel-transformer@0.88.0 from lock file\r\nnpm error Missing: @react-native/babel-preset@0.88.0 from lock file\r\nnpm error Missing: flow-parser@0.327.0 from lock file\r\nnpm error Missing: @babel/plugin-transform-react-jsx-self@7.29.7 from lock file\r\nnpm error Missing: @babel/plugin-transform-react-jsx-source@7.29.7 from lock file\r\nnpm error Missing: @babel/plugin-transform-regenerator@7.29.8 from lock file\r\nnpm error Missing: flow-parser@0.327.0 from lock file\r\nnpm error Missing: flow-estree@0.327.0 from lock file\r\nnpm error Missing: flow-estree@0.327.0 from lock file\r\nnpm error\r\nnpm error Clean install a project\r\nnpm error\r\nnpm error Usage:\r\nnpm error npm ci\r\nnpm error\r\nnpm error Options:\r\nnpm error [--install-strategy \u003Choisted|nested|shallow|linked\u003E] [--legacy-bundling]\r\nnpm error [--global-style] [--omit \u003Cdev|optional|peer\u003E [--omit \u003Cdev|optional|peer\u003E ...]]\r\nnpm error [--include \u003Cprod|dev|optional|peer\u003E [--include \u003Cprod|dev|optional|peer\u003E ...]]\r\nnpm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts]\r\nnpm error [--allow-directory \u003Call|none|root\u003E] [--allow-file \u003Call|none|root\u003E]\r\nnpm error [--allow-git \u003Call|none|root\u003E] [--allow-remote \u003Call|none|root\u003E]\r\nnpm error [--allow-scripts \u003Cpackage-list\u003E [--allow-scripts \u003Cpackage-list\u003E ...]]\r\nnpm error [--strict-allow-scripts] [--dangerously-allow-all-scripts] [--no-audit]\r\nnpm error [--no-bin-links] [--no-fund] [--dry-run]\r\nnpm error [-w|--workspace \u003Cworkspace-name\u003E [-w|--workspace \u003Cworkspace-name\u003E ...]]\r\nnpm error [--workspaces] [--include-workspace-root] [--install-links]\r\nnpm error\r\nnpm error   --install-strategy\r\nnpm error     Sets the strategy for installing packages in node_modules.\r\nnpm error\r\nnpm error   --legacy-bundling\r\nnpm error     Instead of hoisting package installs in \u0060node_modules\u0060, install packages\r\nnpm error\r\nnpm error   --global-style\r\nnpm error     Only install direct dependencies in the top level \u0060node_modules\u0060,\r\nnpm error\r\nnpm error   --omit\r\nnpm error     Dependency types to omit from the installation tree on disk.\r\nnpm error\r\nnpm error   --include\r\nnpm error     Option that allows for defining which types of dependencies to install.\r\nnpm error\r\nnpm error   --strict-peer-deps\r\nnpm error     If set to \u0060true\u0060, and \u0060--legacy-peer-deps\u0060 is not set, then _any_\r\nnpm error\r\nnpm error   --foreground-scripts\r\nnpm error     Run all build scripts (ie, \u0060preinstall\u0060, \u0060install\u0060, and\r\nnpm error\r\nnpm error   --ignore-scripts\r\nnpm error     If true, npm does not run scripts specified in package.json files.\r\nnpm error\r\nnpm error   --allow-directory\r\nnpm error     Limits the ability for npm to install dependencies from directories.\r\nnpm error\r\nnpm error   --allow-file\r\nnpm error     Limits the ability for npm to install dependencies from tarball files.\r\nnpm error\r\nnpm error   --allow-git\r\nnpm error     Limits the ability for npm to fetch dependencies from git references.\r\nnpm error\r\nnpm error   --allow-remote\r\nnpm error     Limits the ability for npm to fetch dependencies from urls.\r\nnpm error\r\nnpm error   --allow-scripts\r\nnpm error     Comma-separated list of packages whose install-time lifecycle scripts\r\nnpm error\r\nnpm error   --strict-allow-scripts\r\nnpm error     If \u0060true\u0060, turn the install-script policy from a warning into a hard\r\nnpm error\r\nnpm error   --dangerously-allow-all-scripts\r\nnpm error     If \u0060true\u0060, bypass the \u0060allowScripts\u0060 policy entirely and run every\r\nnpm error\r\nnpm error   --audit\r\nnpm error     When \u0022true\u0022 submit audit reports alongside the current npm command to the\r\nnpm error\r\nnpm error   --bin-links\r\nnpm error     Tells npm to create symlinks (or \u0060.cmd\u0060 shims on Windows) for package\r\nnpm error\r\nnpm error   --fund\r\nnpm error     When \u0022true\u0022 displays the message at the end of each \u0060npm install\u0060\r\nnpm error\r\nnpm error   --dr\n\u2026[truncated]",
+    "assertions": [],
+    "executions": [
+      {
+        "source": "setup[0]",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "ci"
+        ],
+        "cwd": "C:\\Users\\user\\NewLearnBridge",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

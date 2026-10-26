@@ -1,4 +1,3 @@
-import { fetch as expoFetch } from "expo/fetch";
 import { Platform } from "react-native";
 
 /**
@@ -11,8 +10,11 @@ export async function uploadToCloudinary(uri, options = {}) {
   const uploadPreset = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
   if (!cloudName || !uploadPreset) {
     throw new Error(
-      "Cloudinary is not configured. Set EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME and EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET, then restart the app."
+      "Cloudinary is not configured. Set EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME and EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET in the EAS environment, then rebuild the app."
     );
+  }
+  if (!uri) {
+    throw new Error("No photo selected.");
   }
 
   const contentType = options.contentType ?? "image/jpeg";
@@ -26,26 +28,30 @@ export async function uploadToCloudinary(uri, options = {}) {
     }
     form.append("file", await fileResponse.blob(), fileName);
   } else {
+    // React Native's FormData accepts { uri, type, name }
     form.append("file", { uri, type: contentType, name: fileName });
   }
 
   form.append("upload_preset", uploadPreset);
 
-  const uploadFetch = Platform.OS === "web" ? fetch : expoFetch;
-  const response = await uploadFetch(
+  // Use the global fetch on all platforms. Do NOT set Content-Type manually.
+  const response = await fetch(
     `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
     { method: "POST", body: form }
   );
+
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message =
       typeof data.error?.message === "string" ? data.error.message : "";
     if (/upload preset.*not found/i.test(message)) {
       throw new Error(
-        `Cloudinary upload preset "${uploadPreset}" was not found in cloud "${cloudName}". Create or select an unsigned upload preset in that Cloudinary account and restart the app.`
+        `Cloudinary upload preset "${uploadPreset}" was not found in cloud "${cloudName}". Create or select an unsigned upload preset in that Cloudinary account.`
       );
     }
-    throw new Error(`Cloudinary upload failed (${response.status}): ${message || response.statusText}`);
+    throw new Error(
+      `Cloudinary upload failed (${response.status}): ${message || response.statusText}`
+    );
   }
   if (
     typeof data.secure_url !== "string" ||
