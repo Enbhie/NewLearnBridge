@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { readFileAsStringAsync } from "expo-file-system";
 
 /**
  * @param {string} uri
@@ -19,19 +20,23 @@ export async function uploadToCloudinary(uri, options = {}) {
 
   const contentType = options.contentType ?? "image/jpeg";
   const fileName = options.fileName ?? "mission.jpg";
-  const form = new FormData();
 
+  let filePart;
   if (Platform.OS === "web") {
     const fileResponse = await fetch(uri);
     if (!fileResponse.ok) {
       throw new Error("Could not read the selected photo. Please choose it again.");
     }
-    form.append("file", await fileResponse.blob(), fileName);
+    filePart = await fileResponse.blob();
   } else {
-    // React Native's FormData accepts { uri, type, name }
-    form.append("file", { uri, type: contentType, name: fileName });
+    const fileContent = await readFileAsStringAsync(uri, {
+      encoding: "base64",
+    });
+    filePart = new File([fileContent], fileName, { type: contentType });
   }
 
+  const form = new FormData();
+  form.append("file", filePart);
   form.append("upload_preset", uploadPreset);
 
   // Use the global fetch on all platforms. Do NOT set Content-Type manually.

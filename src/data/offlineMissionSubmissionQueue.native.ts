@@ -1,4 +1,5 @@
 import { Directory, File, Paths } from "expo-file-system";
+import { readFileAsStringAsync } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import * as Network from "expo-network";
 import { auth } from "../firebase";
@@ -189,6 +190,16 @@ export async function saveMissionPhotoSubmission(
   const durableFile = new File(PHOTO_DIRECTORY, `${id}.${extension}`);
   await source.copy(durableFile);
 
+  let dataUri: string | undefined;
+  try {
+    dataUri = await readFileAsStringAsync(durableFile.uri, {
+      encoding: "base64",
+    });
+  } catch (error) {
+    if (durableFile.exists) durableFile.delete();
+    throw error;
+  }
+
   const submission: OfflineMissionSubmission = {
     id,
     userId,
@@ -219,7 +230,7 @@ export async function saveMissionPhotoSubmission(
     throw error;
   }
 
-  return submission;
+  return { ...submission, dataUri };
 }
 
 export async function getMissionSubmissions(
