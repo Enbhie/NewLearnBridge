@@ -1,5 +1,4 @@
 import { Directory, File, Paths } from "expo-file-system";
-import { readFileAsStringAsync } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import * as Network from "expo-network";
 import { auth } from "../firebase";
@@ -52,6 +51,22 @@ type SubmissionRow = Omit<
 const DATABASE_NAME = "learnbridge-mission-submissions.db";
 const PHOTO_DIRECTORY = new Directory(Paths.document, "mission-submissions");
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+const SUBMISSION_COLUMNS = `
+  id,
+  user_id AS userId,
+  mission_id AS missionId,
+  file_uri AS fileUri,
+  content_type AS contentType,
+  submitted_at AS submittedAt,
+  status,
+  error_message AS errorMessage,
+  storage_uploaded AS storageUploaded,
+  storage_provider AS storageProvider,
+  cloudinary_public_id AS cloudinaryPublicId,
+  cloudinary_secure_url AS cloudinarySecureUrl,
+  database_submission_id AS databaseSubmissionId
+`;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 type StatusChangeListener = (submission: OfflineMissionSubmission) => void;
@@ -188,17 +203,7 @@ export async function saveMissionPhotoSubmission(
 
   const id = createSubmissionId();
   const durableFile = new File(PHOTO_DIRECTORY, `${id}.${extension}`);
-  await source.copy(durableFile);
-
-  let dataUri: string | undefined;
-  try {
-    dataUri = await readFileAsStringAsync(durableFile.uri, {
-      encoding: "base64",
-    });
-  } catch (error) {
-    if (durableFile.exists) durableFile.delete();
-    throw error;
-  }
+  source.copy(durableFile);
 
   const submission: OfflineMissionSubmission = {
     id,
@@ -230,7 +235,7 @@ export async function saveMissionPhotoSubmission(
     throw error;
   }
 
-  return { ...submission, dataUri };
+  return submission;
 }
 
 export async function getMissionSubmissions(
@@ -238,20 +243,7 @@ export async function getMissionSubmissions(
 ): Promise<OfflineMissionSubmission[]> {
   const database = await openDatabase();
   const rows = await database.getAllAsync<SubmissionRow>(
-    `SELECT
-       id,
-       user_id AS userId,
-       mission_id AS missionId,
-       file_uri AS fileUri,
-       content_type AS contentType,
-       submitted_at AS submittedAt,
-       status,
-       error_message AS errorMessage,
-       storage_uploaded AS storageUploaded,
-       storage_provider AS storageProvider,
-       cloudinary_public_id AS cloudinaryPublicId,
-       cloudinary_secure_url AS cloudinarySecureUrl,
-       database_submission_id AS databaseSubmissionId
+    `SELECT ${SUBMISSION_COLUMNS}
      FROM mission_submissions
      WHERE user_id = ?
      ORDER BY submitted_at DESC`,
@@ -290,20 +282,7 @@ async function syncUserSubmissions(
   if (isDefinitelyOffline(networkState)) {
     const database = await openDatabase();
     const pending = await database.getAllAsync<SubmissionRow>(
-      `SELECT
-         id,
-         user_id AS userId,
-         mission_id AS missionId,
-         file_uri AS fileUri,
-         content_type AS contentType,
-         submitted_at AS submittedAt,
-         status,
-         error_message AS errorMessage,
-         storage_uploaded AS storageUploaded,
-         storage_provider AS storageProvider,
-         cloudinary_public_id AS cloudinaryPublicId,
-         cloudinary_secure_url AS cloudinarySecureUrl,
-         database_submission_id AS databaseSubmissionId
+      `SELECT ${SUBMISSION_COLUMNS}
        FROM mission_submissions
        WHERE user_id = ?
          AND status IN ('saved_offline', 'pending_upload', 'upload_failed')
@@ -332,32 +311,21 @@ async function syncUserSubmissions(
   }
 
   const database = await openDatabase();
-  const pending = await database.getAllAsync<SubmissionRow>(
-    `SELECT
-       id,
-       user_id AS userId,
-       mission_id AS missionId,
-       file_uri AS fileUri,
-       content_type AS contentType,
-       submitted_at AS submittedAt,
-       status,
-       error_message AS errorMessage,
-       storage_uploaded AS storageUploaded,
-       storage_provider AS storageProvider,
-       cloudinary_public_id AS cloudinaryPublicId,
-       cloudinary_secure_url AS cloudinarySecureUrl,
-       database_submission_id AS databaseSubmissionId
-     FROM mission_submissions
-     WHERE user_id = ?
-       AND status IN (
-         'saved_offline',
-         'pending_upload',
-         'upload_failed'
-         ${retryReviewEmail ? ", 'review_email_failed'" : ""}
-       )
-     ORDER BY submitted_at ASC`,
-    userId
-  ).then((rows) => rows.map(mapSubmissionRow));
+  const pending = await database
+    .getAllAsync<SubmissionRow>(
+      `SELECT ${SUBMISSION_COLUMNS}
+       FROM mission_submissions
+       WHERE user_id = ?
+         AND status IN (
+           'saved_offline',
+           'pending_upload',
+           'upload_failed'
+           ${retryReviewEmail ? ", 'review_email_failed'" : ""}
+         )
+       ORDER BY submitted_at ASC`,
+      userId
+    )
+    .then((rows) => rows.map(mapSubmissionRow));
 
   for (const submission of pending) {
     if (auth?.currentUser?.uid !== userId) return;
@@ -429,10 +397,9 @@ async function syncUserSubmissions(
       );
       const reviewEmailError =
         "reviewEmailError" in result ? result.reviewEmailError : undefined;
-      const finalStatus =
-        reviewEmailError
-          ? "review_email_failed"
-          : result.status === "awaiting_parent_confirmation"
+      const finalStatus: MissionSubmissionStatus = reviewEmailError
+        ? "review_email_failed"
+        : result.status === "awaiting_parent_confirmation"
           ? "awaiting_parent_confirmation"
           : "submitted_successfully";
       await database.runAsync(
@@ -440,12 +407,15 @@ async function syncUserSubmissions(
          SET status = ?, error_message = ?
          WHERE id = ? AND user_id = ?`,
         finalStatus,
-         reviewEmailError ?? null,
+        reviewEmailError ?? null,
         submission.id,
         userId
       );
-      const localFile = new File(submission.fileUri);
-      if (localFile.exists) localFile.delete();
+      // Keep the local photo if the review email failed, so a retry still has it.
+      if (!reviewEmailError) {
+        const localFile = new File(submission.fileUri);
+        if (localFile.exists) localFile.delete();
+      }
       onStatusChange({
         ...submission,
         status: finalStatus,
@@ -500,15 +470,19 @@ export function syncMissionSubmissions(
       listeners,
       promise: Promise.resolve(),
     };
-    newJob.promise = syncUserSubmissions(userId, (submission) => {
-      for (const listener of [...listeners]) {
-        try {
-          listener(submission);
-        } catch (error) {
-          console.error("Mission submission status listener failed.", error);
+    newJob.promise = syncUserSubmissions(
+      userId,
+      (submission) => {
+        for (const listener of [...listeners]) {
+          try {
+            listener(submission);
+          } catch (error) {
+            console.error("Mission submission status listener failed.", error);
+          }
         }
-      }
-    }, options.retryReviewEmail === true).finally(() => {
+      },
+      options.retryReviewEmail === true
+    ).finally(() => {
       if (syncPromises.get(userId) === newJob) syncPromises.delete(userId);
     });
     syncPromises.set(userId, newJob);
@@ -527,7 +501,7 @@ export async function deleteMissionSubmissionsForUser(userId: string): Promise<v
   const submissions = await getMissionSubmissions(userId);
   for (const submission of submissions) {
     const localFile = new File(submission.fileUri);
-    if (localFile.exists) await localFile.delete();
+    if (localFile.exists) localFile.delete();
   }
   await database.runAsync("DELETE FROM mission_submissions WHERE user_id = ?", userId);
 }
